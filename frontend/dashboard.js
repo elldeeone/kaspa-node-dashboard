@@ -6,9 +6,10 @@
 class KaspaDashboard {
     constructor() {
         this.updateInterval = 5000; // 5 seconds
+        this.phases = ['IBD Negotiation', 'Headers Proof IBD', 'Block Download', 'Finalization'];
         this.phaseClassMap = {
             'Negotiation': 'phase-negotiation',
-            'Headers Proof': 'phase-headers-proof',
+            'Headers Proof': 'phase-headers-proof', 
             'Block Download': 'phase-block-download',
             'Post-Processing': 'phase-post-processing',
             'Complete': 'phase-complete',
@@ -33,11 +34,10 @@ class KaspaDashboard {
             uptime: document.getElementById('uptime'),
             
             // Sync progress elements
-            syncPhase: document.getElementById('syncPhase'),
+            syncPhaseIndicator: document.getElementById('syncPhaseIndicator'),
             syncSubPhase: document.getElementById('syncSubPhase'),
             subPhaseContainer: document.getElementById('subPhaseContainer'),
             progressText: document.getElementById('progressText'),
-            progressFill: document.getElementById('progressFill'),
             syncDetails: document.getElementById('syncDetails'),
             syncPeerAddress: document.getElementById('syncPeerAddress'),
             peerAddressContainer: document.getElementById('peerAddressContainer'),
@@ -45,10 +45,6 @@ class KaspaDashboard {
             syncErrorContainer: document.getElementById('syncErrorContainer'),
             
             // Blockchain stats elements
-            blockCount: document.getElementById('blockCount'),
-            headerCount: document.getElementById('headerCount'),
-            blueScore: document.getElementById('blueScore'),
-            difficulty: document.getElementById('difficulty'),
             mempoolSize: document.getElementById('mempoolSize'),
             
             // Peer overview elements
@@ -56,8 +52,12 @@ class KaspaDashboard {
             peerDirection: document.getElementById('peerDirection'),
             ibdPeers: document.getElementById('ibdPeers'),
             averagePing: document.getElementById('averagePing'),
-            peerVersions: document.getElementById('peerVersions'),
             peerList: document.getElementById('peerList'),
+            
+            // New elements for redesigned layout
+            outboundCount: document.getElementById('outboundCount'),
+            inboundCount: document.getElementById('inboundCount'),
+            radialProgress: document.getElementById('radialProgress'),
             
             // Update time
             lastUpdate: document.getElementById('lastUpdate')
@@ -68,8 +68,104 @@ class KaspaDashboard {
      * Initialize the dashboard
      */
     init() {
+        this.initializeRadialProgress();
+        this.initializeSyncPhaseIndicator();
         this.fetchData();
         setInterval(() => this.fetchData(), this.updateInterval);
+    }
+    
+    /**
+     * Initialize radial progress component
+     */
+    initializeRadialProgress() {
+        const container = this.elements.radialProgress;
+        const circumference = 2 * Math.PI * 45;
+        
+        container.innerHTML = `
+            <svg class="absolute inset-0" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" class="text-zinc-800" stroke="currentColor" stroke-width="10" fill="none" />
+                <circle
+                    cx="50"
+                    cy="50"
+                    r="45"
+                    class="text-teal-400"
+                    stroke="currentColor"
+                    stroke-width="10"
+                    fill="none"
+                    stroke-linecap="round"
+                    stroke-dasharray="${circumference}"
+                    stroke-dashoffset="${circumference}"
+                    transform="rotate(-90 50 50)"
+                    id="radialProgressCircle"
+                />
+            </svg>
+            <div class="flex flex-col items-center text-center">
+                <span class="text-4xl font-bold text-gray-50" id="radialProgressValue">0</span>
+                <span class="text-sm text-zinc-400">Peers</span>
+            </div>
+        `;
+    }
+    
+    /**
+     * Update radial progress
+     */
+    updateRadialProgress(value, max = 16) {
+        const circumference = 2 * Math.PI * 45;
+        const progress = value / max;
+        const strokeDashoffset = circumference * (1 - progress);
+        
+        const circle = document.getElementById('radialProgressCircle');
+        const valueElement = document.getElementById('radialProgressValue');
+        
+        if (circle && valueElement) {
+            circle.style.strokeDashoffset = strokeDashoffset;
+            valueElement.textContent = value;
+        }
+    }
+    
+    /**
+     * Initialize sync phase indicator
+     */
+    initializeSyncPhaseIndicator() {
+        this.updateSyncPhaseIndicator('IBD Negotiation');
+    }
+    
+    /**
+     * Update sync phase indicator
+     */
+    updateSyncPhaseIndicator(currentPhase) {
+        const container = this.elements.syncPhaseIndicator;
+        const currentIndex = this.phases.indexOf(currentPhase);
+        
+        let html = '';
+        this.phases.forEach((phase, index) => {
+            const isCompleted = index < currentIndex;
+            const isCurrent = index === currentIndex;
+            
+            html += `
+                <div class="flex flex-col items-center gap-2">
+                    <div class="relative flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 ${
+                        isCompleted ? 'border-teal-400 bg-teal-400' : 'border-zinc-600'
+                    } ${isCurrent ? 'border-teal-400' : ''}">
+                        ${isCompleted ? '<svg class="h-5 w-5 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>' : ''}
+                        ${isCurrent ? '<span class="absolute h-full w-full animate-ping rounded-full bg-teal-400 opacity-75"></span><div class="h-3 w-3 rounded-full bg-teal-400"></div>' : ''}
+                    </div>
+                    <p class="text-center text-xs font-medium transition-colors duration-300 ${
+                        isCompleted || isCurrent ? 'text-gray-200' : 'text-zinc-500'
+                    }">${phase}</p>
+                </div>
+            `;
+            
+            if (index < this.phases.length - 1) {
+                html += `
+                    <div class="relative top-4 mx-2 h-0.5 flex-1 rounded-full transition-colors duration-300 ${
+                        isCompleted ? 'bg-teal-400' : 'bg-zinc-600'
+                    }"></div>
+                `;
+            }
+        });
+        
+        container.innerHTML = html;
     }
     
     /**
@@ -113,6 +209,19 @@ class KaspaDashboard {
     }
     
     /**
+     * Format sub-phase names to be human readable
+     */
+    formatSubPhase(subPhase) {
+        if (!subPhase) return '';
+        
+        // Convert snake_case to Title Case
+        return subPhase
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    }
+    
+    /**
      * Update peer versions display
      */
     updatePeerVersions(versions) {
@@ -138,76 +247,80 @@ class KaspaDashboard {
         const container = this.elements.peerList;
         
         if (peers.length === 0) {
-            container.innerHTML = '<div style=\"text-align: center; color: #7f8c8d; padding: 20px;\">No peers connected</div>';
+            container.innerHTML = '<tr><td colspan="5" class="text-center text-zinc-400 py-8">No peers connected</td></tr>';
             return;
         }
         
         // Clear existing content
-        while (container.firstChild) {
-            container.removeChild(container.firstChild);
-        }
+        container.innerHTML = '';
         
         peers.forEach(peer => {
-            const item = document.createElement('div');
-            item.className = 'peer-item';
+            const row = document.createElement('tr');
+            row.className = 'border-b border-zinc-800 hover:bg-zinc-800/50';
             
             const version = peer.version.includes('kaspad:') ? 
                 peer.version.split('kaspad:')[1].split('/')[0] : 
                 peer.version;
+                
+            const pingColor = peer.ping > 1000 ? 'text-red-400' : 
+                             peer.ping > 500 ? 'text-yellow-400' : 'text-green-400';
             
-            const badges = [];
-            if (peer.is_outbound) badges.push('<span class=\"badge badge-outbound\">OUT</span>');
-            if (!peer.is_outbound) badges.push('<span class=\"badge badge-inbound\">IN</span>');
-            if (peer.is_ibd) badges.push('<span class=\"badge badge-ibd\">IBD</span>');
+            const directionBadge = peer.is_outbound ? 
+                '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-teal-500/50 bg-teal-500/10 text-teal-400">OUT</span>' :
+                '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-purple-500/50 bg-purple-500/10 text-purple-400">IN</span>';
             
-            item.innerHTML = `
-                <div class=\"peer-info\">
-                    <div class=\"peer-ip\">${peer.ip}:${peer.port}</div>
-                    <div class=\"peer-version\">v${version}</div>
-                    <div class=\"peer-badges\">${badges.join('')}</div>
-                </div>
-                <div class=\"peer-stats\">
-                    <div class=\"peer-ping\">${peer.ping}ms</div>
-                    <div style=\"font-size: 0.7em; color: #95a5a6;\">
-                        ${this.formatDuration(peer.connected_time)}
-                    </div>
-                </div>
+            // Add IBD tag if this is an IBD peer
+            const ibdTag = peer.is_ibd ? 
+                '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-orange-500/50 bg-orange-500/10 text-orange-400 ml-1">IBD</span>' : '';
+            
+            const peerAddress = `${peer.ip}:${peer.port}`;
+            
+            row.innerHTML = `
+                <td class="py-3 px-2 font-mono text-sm text-zinc-300">${peerAddress}${ibdTag}</td>
+                <td class="py-3 px-2">
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-zinc-700 text-zinc-300">
+                        v${version}
+                    </span>
+                </td>
+                <td class="py-3 px-2 text-center">${directionBadge}</td>
+                <td class="py-3 px-2 text-right font-medium ${pingColor}">${peer.ping}ms</td>
+                <td class="py-3 px-2 text-right text-zinc-400 text-sm">${this.formatDuration(peer.connected_time)}</td>
             `;
             
-            container.appendChild(item);
+            container.appendChild(row);
         });
     }
     
     /**
-     * Update sync phase display with appropriate badge
+     * Map sync phase from API to display phase
      */
-    updateSyncPhase(phase) {
-        this.elements.syncPhase.textContent = phase;
-        
-        // Add appropriate badge based on phase
-        let badgeClass = '';
-        for (const [keyword, className] of Object.entries(this.phaseClassMap)) {
-            if (phase.includes(keyword)) {
-                badgeClass = className;
-                break;
-            }
+    mapSyncPhase(apiPhase) {
+        if (!apiPhase || apiPhase === 'Complete' || apiPhase.includes('Synchronized')) {
+            return 'Finalization';
         }
-        
-        if (badgeClass) {
-            const badge = document.createElement('span');
-            badge.className = `phase-badge ${badgeClass}`;
-            badge.textContent = 'IBD';
-            this.elements.syncPhase.appendChild(badge);
+        if (apiPhase.includes('Negotiation')) {
+            return 'IBD Negotiation';
         }
+        if (apiPhase.includes('Headers') || apiPhase.includes('Proof')) {
+            return 'Headers Proof IBD';
+        }
+        if (apiPhase.includes('Block') || apiPhase.includes('Download')) {
+            return 'Block Download';
+        }
+        return 'IBD Negotiation'; // Default fallback
     }
     
     /**
      * Update conditional display elements
      */
-    updateConditionalDisplay(container, value, textElement) {
+    updateConditionalDisplay(container, value, textElement, isSubPhase = false) {
         if (value) {
             container.style.display = 'flex';
-            textElement.textContent = typeof value === 'string' ? value : value.replace(/_/g, ' ');
+            if (isSubPhase) {
+                textElement.textContent = this.formatSubPhase(value);
+            } else {
+                textElement.textContent = typeof value === 'string' ? value : value.replace(/_/g, ' ');
+            }
         } else {
             container.style.display = 'none';
         }
@@ -248,13 +361,49 @@ class KaspaDashboard {
      * Update node status section
      */
     updateNodeStatus(kaspadData) {
-        this.elements.syncStatus.textContent = kaspadData.isSynced ? 'Synchronized' : 'Syncing';
-        this.elements.syncStatus.className = kaspadData.isSynced ? 'status-ready' : 'status-syncing';
-        this.elements.version.textContent = kaspadData.version || 'Unknown';
-        this.elements.p2pId.textContent = kaspadData.p2pId || 'Unknown';
+        const status = kaspadData.isSynced ? 'Running' : 'Syncing';
+        this.elements.syncStatus.textContent = status;
+        this.elements.syncStatus.className = kaspadData.isSynced ? 'text-teal-400' : 'text-yellow-400';
+        
+        const version = kaspadData.version || 'Unknown';
+        this.elements.version.textContent = version === 'Unknown' ? version : `v${version}`;
+        
+        const p2pId = kaspadData.p2pId || 'Unknown';
+        this.elements.p2pId.textContent = `P2P ID: ${p2pId}`;
+        this.elements.p2pId.title = `Click to copy P2P ID: ${p2pId}`;
+        
+        // Add click handler for P2P ID copying
+        this.elements.p2pId.onclick = () => {
+            if (p2pId !== 'Unknown') {
+                navigator.clipboard.writeText(p2pId).then(() => {
+                    // Brief visual feedback
+                    const originalText = this.elements.p2pId.textContent;
+                    this.elements.p2pId.textContent = 'P2P ID: Copied!';
+                    this.elements.p2pId.style.color = '#10b981';
+                    setTimeout(() => {
+                        this.elements.p2pId.textContent = originalText;
+                        this.elements.p2pId.style.color = '';
+                    }, 1000);
+                }).catch(() => {
+                    console.log('Failed to copy P2P ID');
+                });
+            }
+        };
+        
         this.elements.network.textContent = kaspadData.networkName || 'Unknown';
-        this.elements.utxoIndexed.textContent = kaspadData.hasUtxoIndex ? 'Yes' : 'No';
-        this.elements.uptime.textContent = kaspadData.uptime?.uptime_formatted || 'Unknown';
+        
+        const uptime = kaspadData.uptime?.uptime_formatted || 'Unknown';
+        this.elements.uptime.textContent = uptime.includes('for') ? uptime : `for ${uptime}`;
+        
+        // Update UTXO indexed status
+        const utxoElement = this.elements.utxoIndexed;
+        if (kaspadData.hasUtxoIndex) {
+            utxoElement.textContent = 'Yes';
+            utxoElement.className = 'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-teal-500/50 bg-teal-500/10 text-teal-400';
+        } else {
+            utxoElement.textContent = 'No';
+            utxoElement.className = 'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-red-500/50 bg-red-500/10 text-red-400';
+        }
     }
     
     /**
@@ -262,26 +411,28 @@ class KaspaDashboard {
      */
     updateSyncProgress(syncProgress) {
         const phase = syncProgress.phase || 'Unknown';
-        
-        // Clear and update phase display
-        while (this.elements.syncPhase.firstChild) {
-            this.elements.syncPhase.removeChild(this.elements.syncPhase.firstChild);
-        }
-        this.updateSyncPhase(phase);
-        
-        // Update progress bar
+        const mappedPhase = this.mapSyncPhase(phase);
         const percentage = syncProgress.percentage || 0;
-        this.elements.progressText.textContent = `${percentage}%`;
-        this.elements.progressFill.style.width = `${percentage}%`;
+        
+        // Update phase indicator
+        this.updateSyncPhaseIndicator(mappedPhase);
+        
+        // Update progress percentage with special handling for 100%
+        if (percentage >= 100 && (phase.includes('Complete') || phase.includes('Synchronized'))) {
+            this.elements.progressText.textContent = '100% Synced';
+        } else {
+            this.elements.progressText.textContent = `${percentage}%`;
+        }
         
         // Update details
         this.elements.syncDetails.textContent = syncProgress.message || syncProgress.details || 'No details available';
         
-        // Update conditional displays
+        // Update conditional displays with proper formatting
         this.updateConditionalDisplay(
             this.elements.subPhaseContainer,
             syncProgress.sub_phase,
-            this.elements.syncSubPhase
+            this.elements.syncSubPhase,
+            true // isSubPhase = true for formatting
         );
         
         this.updateConditionalDisplay(
@@ -301,14 +452,7 @@ class KaspaDashboard {
      * Update blockchain statistics section
      */
     updateBlockchainStats(kaspadData, blockdagData) {
-        const blockCount = blockdagData.blockCount || 0;
-        const headerCount = blockdagData.headerCount || 0;
         const mempoolSize = kaspadData.mempoolSize || 0;
-        
-        this.elements.blockCount.textContent = blockCount === 0 ? '0 (syncing)' : this.formatNumber(blockCount);
-        this.elements.headerCount.textContent = headerCount === 0 ? '0 (syncing)' : this.formatNumber(headerCount);
-        this.elements.blueScore.textContent = this.formatNumber(blockdagData.blueScore || 0);
-        this.elements.difficulty.textContent = this.formatNumber(blockdagData.difficulty || 0);
         this.elements.mempoolSize.textContent = mempoolSize === 0 ? '0 (syncing)' : this.formatNumber(mempoolSize);
     }
     
@@ -316,14 +460,21 @@ class KaspaDashboard {
      * Update network statistics section
      */
     updateNetworkStats(peersData) {
-        this.elements.connectedPeers.textContent = peersData.peerCount || 0;
-        this.elements.peerDirection.textContent = `${peersData.outboundPeers || 0} / ${peersData.inboundPeers || 0}`;
-        this.elements.ibdPeers.textContent = peersData.ibdPeers || 0;
+        const peerCount = peersData.peerCount || 0;
+        const outbound = peersData.outboundPeers || 0;
+        const inbound = peersData.inboundPeers || 0;
+        
+        this.elements.connectedPeers.textContent = peerCount;
+        this.elements.peerDirection.textContent = `${outbound} Out / ${inbound} In`;
+        this.elements.ibdPeers.textContent = `${peersData.ibdPeers || 0} IBD peers`;
         this.elements.averagePing.textContent = peersData.averagePing ? `${peersData.averagePing}ms` : 'N/A';
         
-        if (peersData.peerVersions) {
-            this.updatePeerVersions(peersData.peerVersions);
-        }
+        // Update new elements
+        this.elements.outboundCount.textContent = outbound;
+        this.elements.inboundCount.textContent = inbound;
+        
+        // Update radial progress
+        this.updateRadialProgress(peerCount, 16);
         
         if (peersData.peers) {
             this.updatePeerList(peersData.peers);

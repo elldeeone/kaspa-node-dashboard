@@ -1,0 +1,253 @@
+/* Custom CSS to supplement Tailwind */
+
+/* Ensure proper spacing and layout */
+.grid-background {
+    background-image: 
+        linear-gradient(to right, rgba(39, 39, 42, 0.2) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(39, 39, 42, 0.2) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+
+/* Mobile responsiveness improvements */
+@media (max-width: 768px) {
+    /* Force all content to fit within viewport */
+    body {
+        overflow-x: hidden;
+    }
+    
+    /* Better container spacing on mobile */
+    .max-w-7xl {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+    
+    /* Ensure proper padding on small screens */
+    .p-4 {
+        padding: 0.75rem !important;
+    }
+    
+    .p-6 {
+        padding: 1rem !important;
+    }
+    
+    /* Make sure grid items don't overflow */
+    .grid {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        width: 100% !important;
+    }
+    
+    /* Force grid items to be full width on mobile */
+    .grid > * {
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+    
+    /* Ensure text doesn't overflow */
+    .overflow-x-auto {
+        width: 100%;
+        overflow-x: auto;
+    }
+    
+    /* Better mobile table handling */
+    table {
+        min-width: 650px; /* Optimized minimum width for mobile scrolling */
+        font-size: 0.875rem;
+    }
+    
+    /* Force table container to be scrollable */
+    .overflow-x-auto table {
+        white-space: nowrap;
+    }
+    
+
+    
+    /* Adjust header on mobile */
+    .flex-col.sm\\:flex-row {
+        gap: 1rem !important;
+    }
+    
+    /* Better mobile header layout */
+    @media (max-width: 640px) {
+        .flex-col.sm\\:flex-row {
+            gap: 2rem !important;
+        }
+        
+        /* Add better spacing for status section on mobile */
+        .flex-col.sm\\:flex-row > div:last-child {
+            margin-top: 0.5rem;
+        }
+    }
+    
+    /* Better mobile spacing for sync progress */
+    .text-6xl {
+        font-size: 3rem !important;
+    }
+    
+    /* Fix sync phase indicator on mobile */
+    #syncPhaseIndicator {
+        flex-wrap: nowrap !important;
+        justify-content: space-between !important;
+        gap: 0.25rem !important;
+        overflow-x: auto;
+        padding: 0 0.5rem;
+    }
+    
+    /* Make phase indicators much smaller on mobile */
+    #syncPhaseIndicator > div {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    #syncPhaseIndicator .h-8.w-8 {
+        height: 1.5rem !important;
+        width: 1.5rem !important;
+    }
+    
+    #syncPhaseIndicator .text-xs {
+        font-size: 0.5rem !important;
+        line-height: 1.1 !important;
+        text-align: center !important;
+        word-break: break-word !important;
+        hyphens: auto !important;
+    }
+    
+    /* Make connecting lines smaller */
+    #syncPhaseIndicator .h-0\.5 {
+        height: 1px !important;
+        margin-top: 0.75rem !important;
+    }
+    
+    /* Make icons smaller */
+    #syncPhaseIndicator svg {
+        height: 0.75rem !important;
+        width: 0.75rem !important;
+    }
+    
+    /* Make pulsing dot smaller */
+    #syncPhaseIndicator .h-3.w-3 {
+        height: 0.625rem !important;
+        width: 0.625rem !important;
+    }
+    
+    /* Better mobile radial progress sizing */
+    #radialProgress {
+        width: 120px !important;
+        height: 120px !important;
+    }
+    
+    /* Ensure no horizontal scrolling */
+    * {
+        max-width: 100%;
+    }
+    
+    /* Fix potential flex overflow */
+    .flex {
+        min-width: 0;
+    }
+    
+    /* Mobile peer table override - this overrides desktop styles */
+    .peer-table {
+        table-layout: auto !important;
+    }
+    
+    .peer-table td {
+        padding: 0.5rem 0.25rem !important;
+        font-size: 0.75rem !important;
+    }
+    
+    .peer-table td:first-child {
+        min-width: auto !important;
+        width: auto !important;
+        max-width: none !important;
+    }
+    
+    /* Prevent text overflow on mobile */
+    .truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    /* Ensure proper text wrapping */
+    .text-wrap {
+        word-wrap: break-word;
+        word-break: break-word;
+    }
+    
+    /* Fix container max-width enforcement */
+    .container,
+    .max-w-7xl {
+        box-sizing: border-box;
+    }
+}
+
+/* Desktop table styling - clean and spaced */
+@media (min-width: 769px) {
+    .peer-table {
+        table-layout: fixed !important;
+    }
+
+    .peer-table td:first-child {
+        min-width: 200px !important;
+        width: 200px !important;
+        max-width: 200px !important;
+    }
+
+    .peer-table td {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+        white-space: nowrap;
+    }
+}
+
+/* Smooth transitions for all elements */
+* {
+    transition: all 0.3s ease;
+}
+
+/* Fix any potential layout issues */
+.flex-fix {
+    display: flex !important;
+}
+
+.grid-fix {
+    display: grid !important;
+}
+
+/* Hide scrollbars but keep functionality */
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+}
+
+/* Tooltip positioning fix for mobile */
+@media (max-width: 768px) {
+    .group:hover .absolute {
+        position: fixed !important;
+        top: 20% !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 50 !important;
+        max-width: 280px !important;
+    }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(156, 163, 175, 0.3);
+    border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(156, 163, 175, 0.5);
+}
