@@ -126,14 +126,14 @@ class KaspaDashboard {
     /**
      * Update sync phase indicator
      */
-    updateSyncPhaseIndicator(currentPhase) {
+    updateSyncPhaseIndicator(currentPhase, isComplete = false) {
         const container = this.elements.syncPhaseIndicator;
         const currentIndex = this.phases.indexOf(currentPhase);
         
         let html = '';
         this.phases.forEach((phase, index) => {
-            const isCompleted = index < currentIndex;
-            const isCurrent = index === currentIndex;
+            const isCompleted = isComplete || index < currentIndex;
+            const isCurrent = !isComplete && index === currentIndex;
             
             html += `
                 <div class="flex flex-col items-center gap-2">
@@ -288,7 +288,7 @@ class KaspaDashboard {
      * Map sync phase from API to display phase
      */
     mapSyncPhase(apiPhase) {
-        if (!apiPhase || apiPhase === 'Complete' || apiPhase.includes('Synchronized')) {
+        if (!apiPhase || apiPhase.toLowerCase() === 'complete' || apiPhase.includes('Synchronized')) {
             return 'Finalization';
         }
         if (apiPhase.includes('Negotiation')) {
@@ -407,11 +407,14 @@ class KaspaDashboard {
         const mappedPhase = this.mapSyncPhase(phase);
         const percentage = syncProgress.percentage || 0;
         
-        // Update phase indicator
-        this.updateSyncPhaseIndicator(mappedPhase);
+        // Check if sync is complete
+        const isComplete = percentage >= 100 && (phase.toLowerCase() === 'complete' || phase.includes('Synchronized'));
+        
+        // Update phase indicator with completion status
+        this.updateSyncPhaseIndicator(mappedPhase, isComplete);
         
         // Update progress percentage with special handling for 100%
-        if (percentage >= 100 && (phase.includes('Complete') || phase.includes('Synchronized'))) {
+        if (isComplete) {
             this.elements.progressText.textContent = '100% Synced';
         } else {
             this.elements.progressText.textContent = `${percentage}%`;
@@ -446,7 +449,13 @@ class KaspaDashboard {
      */
     updateBlockchainStats(kaspadData, blockdagData) {
         const mempoolSize = kaspadData.mempoolSize || 0;
-        this.elements.mempoolSize.textContent = mempoolSize === 0 ? '0 (syncing)' : this.formatNumber(mempoolSize);
+        const isSynced = kaspadData.isSynced || false;
+        
+        if (mempoolSize === 0) {
+            this.elements.mempoolSize.textContent = isSynced ? '0' : '0 (syncing)';
+        } else {
+            this.elements.mempoolSize.textContent = this.formatNumber(mempoolSize);
+        }
     }
     
     /**
