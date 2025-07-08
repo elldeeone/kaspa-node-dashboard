@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  kaspad:
+    image: supertypo/rusty-kaspad:latest
+    container_name: kaspad
+    restart: on-failure
+    stop_grace_period: 1m
+    volumes:
+      - ${APP_DATA_DIR:-./data}/data:/data
+    ports:
+      - 16110:16110  # GRPC
+      - 16111:16111  # P2P
+      - 17110:17110  # WRPC (Borsh)
+      - 18110:18110  # WRPC (JSON)
+    command: >
+      kaspad
+      --rpclisten=0.0.0.0:16110
+      --rpclisten-borsh=0.0.0.0:17110
+      --rpclisten-json=0.0.0.0:18110
+      --loglevel=info
+    networks:
+      - kaspa-net
+
+  api:
+    build: ./api
+    container_name: kaspa-api
+    restart: on-failure
+    stop_grace_period: 1m
+    environment:
+      KASPAD_HOST: kaspad
+      KASPAD_RPC_PORT: 18110
+      KASPAD_CONTAINER_NAME: kaspad
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # For log parsing
+    depends_on:
+      - kaspad
+    networks:
+      - kaspa-net
+
+  # Frontend Dashboard - The web interface
+  frontend:
+    build: ./frontend
+    container_name: kaspa-frontend
+    restart: on-failure
+    stop_grace_period: 1m
+    ports:
+      - 8080:8080
+    depends_on:
+      - api
+    networks:
+      - kaspa-net
+
+networks:
+  kaspa-net:
+    driver: bridge

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaspa Node Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🟦 Kaspa Node Dashboard</h1>
+        
+        <div class="grid">
+            <!-- Node Status -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">🔗</span>
+                    <h2 class="card-title">Node Status</h2>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Status</span>
+                    <span class="stat-value" id="syncStatus">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Version</span>
+                    <span class="stat-value" id="version">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">P2P ID</span>
+                    <span class="stat-value" id="p2pId">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Network</span>
+                    <span class="stat-value" id="network">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">UTXO Indexed</span>
+                    <span class="stat-value" id="utxoIndexed">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Uptime</span>
+                    <span class="stat-value" id="uptime">Loading...</span>
+                </div>
+            </div>
+            
+            <!-- Sync Progress -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">⏳</span>
+                    <h2 class="card-title">Sync Progress</h2>
+                </div>
+                <div id="syncProgress">
+                    <div class="stat-item">
+                        <span class="stat-label">Phase</span>
+                        <span class="stat-value" id="syncPhase">Loading...</span>
+                    </div>
+                    <div class="stat-item" id="subPhaseContainer" style="display: none;">
+                        <span class="stat-label">Sub-Phase</span>
+                        <span class="stat-value" id="syncSubPhase">-</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%">
+                            <span class="progress-text" id="progressText">0%</span>
+                        </div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Details</span>
+                        <span class="stat-value" id="syncDetails">Loading...</span>
+                    </div>
+                    <div class="stat-item" id="peerAddressContainer" style="display: none;">
+                        <span class="stat-label">Sync Peer</span>
+                        <span class="stat-value" id="syncPeerAddress">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Last Block Time</span>
+                        <span class="stat-value" id="lastBlockTime">Loading...</span>
+                    </div>
+                    <div class="stat-item" id="syncErrorContainer" style="display: none;">
+                        <span class="stat-label">Error</span>
+                        <span class="stat-value error" id="syncError">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Blockchain Stats -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">📊</span>
+                    <h2 class="card-title">Blockchain Stats</h2>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label tooltip" data-tooltip="Number of blocks (0 during sync)">Block Count</span>
+                    <span class="stat-value" id="blockCount">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label tooltip" data-tooltip="Number of headers (0 during sync)">Header Count</span>
+                    <span class="stat-value" id="headerCount">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Blue Score</span>
+                    <span class="stat-value" id="blueScore">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Difficulty</span>
+                    <span class="stat-value" id="difficulty">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label tooltip" data-tooltip="Mempool disabled during sync">Mempool Size</span>
+                    <span class="stat-value" id="mempoolSize">Loading...</span>
+                </div>
+            </div>
+            
+            <!-- Peer Overview -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">🌐</span>
+                    <h2 class="card-title">Peer Overview</h2>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Connected Peers</span>
+                    <span class="stat-value" id="connectedPeers">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Outbound / Inbound</span>
+                    <span class="stat-value" id="peerDirection">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">IBD Peers</span>
+                    <span class="stat-value" id="ibdPeers">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Average Ping</span>
+                    <span class="stat-value" id="averagePing">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Peer Versions</span>
+                    <div class="version-stats" id="peerVersions">
+                        <!-- Version badges will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Detailed Peer List -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-icon">📈</span>
+                <h2 class="card-title">Connected Peers</h2>
+            </div>
+            <div class="peer-list" id="peerList">
+                <!-- Peer items will be populated here -->
+            </div>
+        </div>
+        
+        <div class="last-updated">
+            Last updated: <span id="lastUpdate">Never</span>
+        </div>
+    </div>
+    
+    <script src="dashboard.js"></script>
+</body>
+</html>
