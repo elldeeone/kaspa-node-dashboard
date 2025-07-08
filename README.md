@@ -8,7 +8,7 @@ A real-time web dashboard for monitoring your Kaspa node with detailed sync prog
 docker-compose up --build -d
 ```
 
-Access dashboard at [http://localhost:8080](http://localhost:8080)
+Access dashboard at [http://localhost:4321](http://localhost:4321)
 
 ## Features
 
@@ -24,4 +24,4 @@ Access dashboard at [http://localhost:8080](http://localhost:8080)
 
 ## Ports
 
-- `8080` - Dashboard (public)
+- `4321` - Dashboard (public)
