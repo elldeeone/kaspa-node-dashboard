@@ -50,7 +50,6 @@ class KaspaDashboard {
             blueScore: document.getElementById('blueScore'),
             difficulty: document.getElementById('difficulty'),
             mempoolSize: document.getElementById('mempoolSize'),
-            lastBlockTime: document.getElementById('lastBlockTime'),
             
             // Peer overview elements
             connectedPeers: document.getElementById('connectedPeers'),
@@ -311,7 +310,6 @@ class KaspaDashboard {
         this.elements.blueScore.textContent = this.formatNumber(blockdagData.blueScore || 0);
         this.elements.difficulty.textContent = this.formatNumber(blockdagData.difficulty || 0);
         this.elements.mempoolSize.textContent = mempoolSize === 0 ? '0 (syncing)' : this.formatNumber(mempoolSize);
-        this.elements.lastBlockTime.textContent = blockdagData.lastBlockTime || 'Unknown';
     }
     
     /**

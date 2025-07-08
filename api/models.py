@@ -61,6 +61,14 @@ class ContainerUptime:
     uptime_seconds: int
     uptime_formatted: str
     started_at: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "uptime_seconds": self.uptime_seconds,
+            "uptime_formatted": self.uptime_formatted,
+            "started_at": self.started_at
+        }
 
 @dataclass
 class PeerInfo:

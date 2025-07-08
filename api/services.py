@@ -197,10 +197,15 @@ class KaspadService:
                 return None
             
             started_at_str = container_data[0]["State"]["StartedAt"]
+            # Handle nanoseconds in timestamp by truncating to microseconds
+            if '.' in started_at_str and started_at_str.endswith('Z'):
+                # Split on the decimal point and keep only 6 digits for microseconds
+                date_part, time_part = started_at_str.split('.')
+                microseconds = time_part.rstrip('Z')[:6].ljust(6, '0')
+                started_at_str = f"{date_part}.{microseconds}Z"
             started_at = datetime.fromisoformat(started_at_str.replace('Z', '+00:00'))
             
             # Calculate uptime
-            from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             uptime_delta = now - started_at
             uptime_seconds = int(uptime_delta.total_seconds())
