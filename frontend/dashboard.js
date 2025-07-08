@@ -6,15 +6,8 @@
 class KaspaDashboard {
     constructor() {
         this.updateInterval = 5000; // 5 seconds
+        this.MAX_PEERS = 16; // Maximum expected peer connections
         this.phases = ['IBD Negotiation', 'Headers Proof IBD', 'Block Download', 'Finalization'];
-        this.phaseClassMap = {
-            'Negotiation': 'phase-negotiation',
-            'Headers Proof': 'phase-headers-proof', 
-            'Block Download': 'phase-block-download',
-            'Post-Processing': 'phase-post-processing',
-            'Complete': 'phase-complete',
-            'Error': 'phase-error'
-        };
         
         this.elements = this.cacheElements();
         this.init();
@@ -109,7 +102,7 @@ class KaspaDashboard {
     /**
      * Update radial progress
      */
-    updateRadialProgress(value, max = 16) {
+    updateRadialProgress(value, max = this.MAX_PEERS) {
         const circumference = 2 * Math.PI * 45;
         const progress = value / max;
         const strokeDashoffset = circumference * (1 - progress);
@@ -474,7 +467,7 @@ class KaspaDashboard {
         this.elements.inboundCount.textContent = inbound;
         
         // Update radial progress
-        this.updateRadialProgress(peerCount, 16);
+        this.updateRadialProgress(peerCount, this.MAX_PEERS);
         
         if (peersData.peers) {
             this.updatePeerList(peersData.peers);
