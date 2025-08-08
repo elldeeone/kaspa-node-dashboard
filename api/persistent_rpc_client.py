@@ -92,8 +92,10 @@ class PersistentKaspadRPCClient:
             # Use longer timeout during IBD
             self.ws = await self.session.ws_connect(
                 self.ws_url,
-                timeout=aiohttp.ClientTimeout(total=60),
-                heartbeat=30  # Add heartbeat for keep-alive
+                timeout=aiohttp.ClientTimeout(total=60, sock_read=30),
+                heartbeat=30,  # Add heartbeat for keep-alive
+                autoping=True,  # Auto-ping to keep connection alive
+                autoclose=False  # Don't auto-close on server messages
             )
             
             self.state = ConnectionState.CONNECTED
@@ -108,8 +110,11 @@ class PersistentKaspadRPCClient:
             # Start periodic cleanup task
             asyncio.create_task(self._periodic_cleanup())
             
-            # Try subscriptions with retry logic
-            await self._subscribe_with_retry()
+            # Try subscriptions with retry logic (but don't fail if they don't work during IBD)
+            try:
+                await self._subscribe_with_retry()
+            except Exception as e:
+                logger.warning(f"Initial subscription failed (normal during IBD): {e}")
             
             # Initial data fetch
             await self._fetch_initial_data()
@@ -138,7 +143,7 @@ class PersistentKaspadRPCClient:
                         if request_id in self.pending_requests:
                             future, _ = self.pending_requests.pop(request_id)
                             if "error" in data:
-                                future.set_exception(Exception(data["error"]))
+                                future.set_exception(Exception(data.get("error", "Unknown error")))
                             else:
                                 # Basic RPC response validation
                                 result = data.get("params", data)
@@ -147,9 +152,11 @@ class PersistentKaspadRPCClient:
                                 else:
                                     future.set_exception(Exception("Invalid RPC response format"))
                     
-                    # Handle notifications
+                    # Handle notifications (these come from subscriptions)
                     elif "method" in data:
-                        await self._handle_notification(data)
+                        # Only handle if we're subscribed
+                        if self.state == ConnectionState.SUBSCRIBED:
+                            await self._handle_notification(data)
                         
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     logger.error(f"WebSocket error: {self.ws.exception()}")
@@ -239,6 +246,8 @@ class PersistentKaspadRPCClient:
             self.state = ConnectionState.SUBSCRIBED
         except Exception as e:
             logger.warning(f"Initial subscription failed: {e}")
+            # During IBD, subscriptions often fail - that's OK, we'll use oneshot calls
+            self.state = ConnectionState.READY  # Still mark as ready even without subscriptions
             # Start retry task for subscriptions
             if not self.subscription_retry_task:
                 self.subscription_retry_task = asyncio.create_task(self._retry_subscriptions())
@@ -345,8 +354,15 @@ class PersistentKaspadRPCClient:
         try:
             logger.debug(f"Starting cache refresh (state={self.state})")
             
-            # During IBD or when not connected, use oneshot calls
-            if self.state not in [ConnectionState.CONNECTED, ConnectionState.READY, ConnectionState.SUBSCRIBED]:
+            # Always try oneshot calls first during IBD since persistent connections are unreliable
+            # Check if we should use oneshot (not fully connected or no WebSocket)
+            use_oneshot = (
+                self.state not in [ConnectionState.CONNECTED, ConnectionState.READY, ConnectionState.SUBSCRIBED]
+                or not self.ws
+                or self.ws.closed
+            )
+            
+            if use_oneshot:
                 logger.info("Using oneshot calls for cache refresh")
                 results = await asyncio.gather(
                     self._oneshot_call("getInfo"),

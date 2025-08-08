@@ -429,7 +429,9 @@ class KaspaDashboard {
         if (isComplete) {
             this.elements.progressText.textContent = '100% Synced';
         } else {
-            this.elements.progressText.textContent = `${percentage}%`;
+            // Format percentage to 1 decimal place
+            const formattedPercentage = typeof percentage === 'number' ? percentage.toFixed(1) : '0.0';
+            this.elements.progressText.textContent = `${formattedPercentage}%`;
         }
         
         // Update details
