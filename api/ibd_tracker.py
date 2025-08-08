@@ -27,21 +27,9 @@ class IBDProgressTracker:
         "kaspa-mainnet": 1636298787611,  # Alias
     }
     
-    # Crescendo hardfork timestamp (changes from 1 BPS to 10 BPS)
-    CRESCENDO_TIMESTAMP = 1714924800000  # May 5, 2025, 15:00 UTC
-    
-    # Network checkpoints for better estimation (update monthly)
-    NETWORK_CHECKPOINTS = {
-        "mainnet": {
-            '2024-11-01': 78000000,
-            '2024-12-01': 80600000,
-            '2025-01-01': 83200000,
-        },
-        "testnet11": {
-            '2024-11-01': 35000000,
-            '2024-12-01': 37600000,
-        }
-    }
+    # Crescendo hardfork timestamp - happened May 5, 2024 (already passed)
+    # Post-Crescendo: Kaspa runs at 10 blocks per second
+    CRESCENDO_TIMESTAMP = 1714924800000  # May 5, 2024, 15:00 UTC
     
     def __init__(self, network: str = "mainnet"):
         self.network = network.lower()
@@ -112,73 +100,67 @@ class IBDProgressTracker:
     def estimate_network_daa_score(self) -> int:
         """
         Estimate current network DAA score using time since genesis.
-        Accounts for Crescendo hardfork (1 BPS → 10 BPS on May 5, 2025).
+        
+        Post-Crescendo calculation: Kaspa produces 10 blocks per second.
+        We need to account for pre-Crescendo (1 BPS) and post-Crescendo (10 BPS) periods.
+        
+        Note: This is a time-based estimation that should be ~98-99% accurate.
+        Kaspa's predictable block time makes this reliable enough for progress display.
         """
         genesis_time_ms = self.GENESIS_TIMESTAMPS.get(self.network, self.GENESIS_TIMESTAMPS["mainnet"])
         current_time_ms = int(time.time() * 1000)
         
-        # Calculate based on block generation rate
-        if current_time_ms < self.CRESCENDO_TIMESTAMP:
-            # Pre-Crescendo: 1 block per second
-            seconds_since_genesis = (current_time_ms - genesis_time_ms) / 1000
-            estimated_score = int(seconds_since_genesis)
-        else:
-            # Post-Crescendo: 10 blocks per second
-            # Calculate pre-Crescendo blocks
-            pre_crescendo_seconds = (self.CRESCENDO_TIMESTAMP - genesis_time_ms) / 1000
-            pre_crescendo_blocks = int(pre_crescendo_seconds)
-            
-            # Calculate post-Crescendo blocks (10 BPS = 100ms per block)
-            post_crescendo_ms = current_time_ms - self.CRESCENDO_TIMESTAMP
-            post_crescendo_blocks = int(post_crescendo_ms / 100)
-            
-            estimated_score = pre_crescendo_blocks + post_crescendo_blocks
+        # Calculate pre-Crescendo blocks (1 block per second until May 5, 2024)
+        pre_crescendo_seconds = (self.CRESCENDO_TIMESTAMP - genesis_time_ms) / 1000
+        pre_crescendo_blocks = int(pre_crescendo_seconds)
         
-        # Check if we have a recent checkpoint for better accuracy
-        checkpoint_estimate = self._get_checkpoint_estimate()
-        if checkpoint_estimate:
-            # Use weighted average favoring checkpoint (more accurate)
-            estimated_score = int(checkpoint_estimate * 0.7 + estimated_score * 0.3)
+        # Calculate post-Crescendo blocks (10 blocks per second after May 5, 2024)
+        post_crescendo_ms = current_time_ms - self.CRESCENDO_TIMESTAMP
+        post_crescendo_blocks = int(post_crescendo_ms / 100)  # 100ms per block = 10 BPS
+        
+        # Total estimated DAA score
+        estimated_score = pre_crescendo_blocks + post_crescendo_blocks
+        
+        # Add a small buffer (0.5%) to account for network variance
+        # This prevents showing 100% when we're actually at 99.5%
+        estimated_score = int(estimated_score * 1.005)
         
         return estimated_score
     
-    def _get_checkpoint_estimate(self) -> Optional[int]:
-        """Get estimate based on hardcoded checkpoints."""
-        checkpoints = self.NETWORK_CHECKPOINTS.get(self.network, self.NETWORK_CHECKPOINTS.get("mainnet", {}))
-        if not checkpoints:
-            return None
-        
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        dates = sorted(checkpoints.keys())
-        
-        # Find the most recent checkpoint
-        for i in range(len(dates) - 1, -1, -1):
-            if dates[i] <= current_date:
-                checkpoint_date = datetime.strptime(dates[i], '%Y-%m-%d')
-                checkpoint_value = checkpoints[dates[i]]
-                days_since = (datetime.now() - checkpoint_date).days
-                
-                # Estimate blocks since checkpoint
-                # Pre-Crescendo: ~86,400 blocks per day (1 BPS)
-                # Post-Crescendo: ~864,000 blocks per day (10 BPS)
-                if datetime.now().timestamp() * 1000 < self.CRESCENDO_TIMESTAMP:
-                    blocks_per_day = 86400
-                else:
-                    blocks_per_day = 864000
-                
-                return checkpoint_value + (days_since * blocks_per_day)
-        
-        return None
-    
-    def calculate_progress(self, phase: str, node_info: Dict[str, Any], blockdag_info: Dict[str, Any]) -> Dict[str, Any]:
+    def calculate_progress(self, phase: str, node_info: Dict[str, Any], blockdag_info: Dict[str, Any],
+                          server_info: Optional[Dict[str, Any]] = None,
+                          network_daa_from_api: Optional[int] = None) -> Dict[str, Any]:
         """
         Calculate sync progress based on phase and available data.
+        Now uses actual network DAA from public API when available.
         
         Returns dict with phase name, percentage, and details.
         """
         virtual_daa_score = blockdag_info.get("virtualDaaScore", 0)
         block_count = blockdag_info.get("blockCount", 0)
-        estimated_network = self.estimate_network_daa_score()
+        
+        # Priority order for network DAA:
+        # 1. Public API (most accurate)
+        # 2. Server info (only when synced)
+        # 3. Time-based estimation (fallback)
+        
+        if network_daa_from_api and network_daa_from_api > 0:
+            # Best option: Use actual network DAA from public API
+            estimated_network = network_daa_from_api
+            logger.debug(f"Using actual network DAA from public API: {estimated_network}")
+        elif server_info and "virtualDaaScore" in server_info and node_info.get("isSynced", False):
+            # When synced, server DAA is the actual network tip
+            estimated_network = server_info.get("virtualDaaScore", 0)
+            logger.debug(f"Using actual network DAA from server (synced): {estimated_network}")
+        else:
+            # Fallback to time-based estimation
+            estimated_network = self.estimate_network_daa_score()
+            logger.debug(f"Using time-based network DAA estimation: {estimated_network}")
+        
+        # Log the sync progress for debugging
+        if virtual_daa_score > 0 and estimated_network > 0:
+            actual_progress = (virtual_daa_score / estimated_network) * 100
+            logger.debug(f"Node DAA: {virtual_daa_score}, Network DAA: {estimated_network}, Actual Progress: {actual_progress:.2f}%")
         
         # Track phase transitions
         if phase != self.previous_phase:
@@ -276,9 +258,12 @@ class IBDProgressTracker:
         }
         return mapping.get(internal_phase, internal_phase)
     
-    def get_sync_progress(self, node_info: Dict[str, Any], blockdag_info: Dict[str, Any]) -> Dict[str, Any]:
+    def get_sync_progress(self, node_info: Dict[str, Any], blockdag_info: Dict[str, Any], 
+                         server_info: Optional[Dict[str, Any]] = None,
+                         network_daa_from_api: Optional[int] = None) -> Dict[str, Any]:
         """
         Main entry point to get current sync progress.
+        Now accepts server_info and network_daa_from_api for accurate network DAA score.
         """
         phase = self.detect_phase(node_info, blockdag_info)
-        return self.calculate_progress(phase, node_info, blockdag_info)
+        return self.calculate_progress(phase, node_info, blockdag_info, server_info, network_daa_from_api)

@@ -122,6 +122,11 @@ class PersistentKaspadRPCClient:
         self._log_cache_timestamp = 0
         self._log_cache_ttl = 30  # Cache for 30 seconds
         
+        # Network DAA cache to reduce API calls
+        self._network_daa_cache = None
+        self._network_daa_cache_timestamp = 0
+        self._network_daa_cache_ttl = 300  # Cache for 5 minutes (network DAA doesn't change that fast)
+        
     async def connect(self):
         """Establish persistent WebSocket connection with circuit breaker."""
         # Circuit breaker check
@@ -524,6 +529,40 @@ class PersistentKaspadRPCClient:
         """Fetch initial data to populate cache."""
         await self._refresh_cached_data()
     
+    async def _fetch_network_daa_from_api(self) -> Optional[int]:
+        """Fetch the actual network DAA score from Kaspa public API with caching."""
+        current_time = time.time()
+        
+        # Check if cache is still valid
+        if (self._network_daa_cache is not None and 
+            current_time - self._network_daa_cache_timestamp < self._network_daa_cache_ttl):
+            logger.debug(f"Using cached network DAA: {self._network_daa_cache} (cache age: {current_time - self._network_daa_cache_timestamp:.1f}s)")
+            return self._network_daa_cache
+        
+        # Cache miss or expired, fetch from API
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Try to get the network info which includes virtualDaaScore
+                async with session.get("https://api.kaspa.org/info/network", 
+                                     timeout=aiohttp.ClientTimeout(total=5)) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        network_daa = int(data.get("virtualDaaScore", 0))
+                        
+                        # Update cache
+                        self._network_daa_cache = network_daa
+                        self._network_daa_cache_timestamp = current_time
+                        
+                        logger.info(f"Fetched fresh network DAA from public API: {network_daa} (will cache for {self._network_daa_cache_ttl}s)")
+                        return network_daa
+        except Exception as e:
+            logger.warning(f"Failed to fetch network DAA from public API: {e}")
+            # Return cached value if available, even if expired
+            if self._network_daa_cache is not None:
+                logger.info(f"Using expired cache due to API failure: {self._network_daa_cache}")
+                return self._network_daa_cache
+        return None
+    
     async def _refresh_cached_data(self):
         """Refresh all cached data from kaspad."""
         try:
@@ -548,6 +587,7 @@ class PersistentKaspadRPCClient:
                     self._oneshot_call("getMempoolEntries"),
                     self._oneshot_call("getConnections"),  # Get connection count during IBD
                     self._oneshot_call("getMetrics", {"connection_metrics": True, "process_metrics": True}),  # Get comprehensive metrics
+                    self._oneshot_call("getServerInfo"),  # Get network DAA score for accurate sync progress
                     return_exceptions=True
                 )
             else:
@@ -561,11 +601,12 @@ class PersistentKaspadRPCClient:
                     self.call("getMempoolEntries"),
                     self.call("getConnections"),  # Get connection count during IBD
                     self.call("getMetrics", {"connection_metrics": True, "process_metrics": True}),  # Get comprehensive metrics
+                    self.call("getServerInfo"),  # Get network DAA score for accurate sync progress
                     return_exceptions=True
                 )
             
             # Log results
-            for i, name in enumerate(["node_info", "blockdag_info", "peer_info", "mempool", "connections", "metrics"]):
+            for i, name in enumerate(["node_info", "blockdag_info", "peer_info", "mempool", "connections", "metrics", "server_info"]):
                 if i < len(results):
                     if isinstance(results[i], Exception):
                         logger.warning("Failed to fetch data",
@@ -623,6 +664,14 @@ class PersistentKaspadRPCClient:
             self.cached_data["connections"] = connections_data
             self.cached_data["metrics"] = metrics_data
             
+            # Store server info (contains network DAA score for sync progress)
+            server_info_data = results[6] if len(results) > 6 and results[6] and not isinstance(results[6], Exception) else None
+            self.cached_data["server_info"] = server_info_data
+            
+            # Fetch actual network DAA from public API for accurate sync progress
+            network_daa = await self._fetch_network_daa_from_api()
+            self.cached_data["network_daa"] = network_daa
+            
             # Store uptime from logs
             self.cached_data["uptime"] = {
                 "uptime_formatted": log_data.get('uptime', 'Unknown'),
@@ -636,9 +685,12 @@ class PersistentKaspadRPCClient:
             # Calculate sync status using IBD tracker
             if self.cached_data["node_info"] and self.cached_data["blockdag_info"]:
                 # Use IBD tracker for accurate phase detection and progress
+                # Pass server_info and network_daa for actual network DAA score
                 sync_progress = self.ibd_tracker.get_sync_progress(
                     self.cached_data["node_info"],
-                    self.cached_data["blockdag_info"]
+                    self.cached_data["blockdag_info"],
+                    self.cached_data.get("server_info"),
+                    self.cached_data.get("network_daa")
                 )
                 
                 self.cached_data["sync_status"] = sync_progress
