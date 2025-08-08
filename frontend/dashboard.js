@@ -25,6 +25,8 @@ class KaspaDashboard {
             network: document.getElementById('network'),
             utxoIndexed: document.getElementById('utxoIndexed'),
             uptime: document.getElementById('uptime'),
+            connectionStatus: document.getElementById('connectionStatus'),
+            connectionIndicator: document.getElementById('connectionIndicator'),
             
             // Sync progress elements
             syncPhaseIndicator: document.getElementById('syncPhaseIndicator'),
@@ -324,6 +326,13 @@ class KaspaDashboard {
      */
     async fetchData() {
         try {
+            // First check connection status
+            const connectionResponse = await fetch('/api/info/connection');
+            if (connectionResponse.ok) {
+                const connectionData = await connectionResponse.json();
+                this.updateConnectionStatus(connectionData);
+            }
+            
             const [kaspadResponse, blockdagResponse, peersResponse] = await Promise.all([
                 fetch('/api/info/kaspad'),
                 fetch('/api/info/blockdag'),
@@ -337,6 +346,9 @@ class KaspaDashboard {
             const kaspadData = await kaspadResponse.json();
             const blockdagData = await blockdagResponse.json();
             const peersData = await peersResponse.json();
+            
+            // Update connection status to show we're connected and receiving data
+            this.updateConnectionStatus({ connected: true, ready: true });
             
             this.updateNodeStatus(kaspadData);
             this.updateSyncProgress(kaspadData.syncProgress || {});
@@ -484,11 +496,43 @@ class KaspaDashboard {
     }
     
     /**
+     * Update connection status indicator
+     */
+    updateConnectionStatus(status) {
+        if (!this.elements.connectionStatus || !this.elements.connectionIndicator) return;
+        
+        if (status.connected && status.ready) {
+            // Fully connected and ready
+            this.elements.connectionStatus.textContent = 'Connected';
+            this.elements.connectionIndicator.className = 'w-2 h-2 rounded-full bg-green-500';
+            this.elements.connectionIndicator.title = 'WebSocket connected and ready';
+        } else if (status.connected && !status.ready) {
+            // Connected but not ready (still initializing)
+            this.elements.connectionStatus.textContent = 'Initializing...';
+            this.elements.connectionIndicator.className = 'w-2 h-2 rounded-full bg-yellow-500 animate-pulse';
+            this.elements.connectionIndicator.title = 'WebSocket connected, initializing';
+        } else {
+            // Not connected
+            this.elements.connectionStatus.textContent = 'Disconnected';
+            this.elements.connectionIndicator.className = 'w-2 h-2 rounded-full bg-red-500 animate-pulse';
+            this.elements.connectionIndicator.title = 'WebSocket disconnected, retrying...';
+        }
+        
+        // Show subscription status if available
+        if (status.subscribed) {
+            this.elements.connectionStatus.textContent += ' (Live)';
+        }
+    }
+    
+    /**
      * Handle errors during data fetching
      */
     handleError(error) {
         this.elements.syncStatus.textContent = 'Error';
         this.elements.syncStatus.className = 'error';
+        
+        // Update connection status to show disconnected
+        this.updateConnectionStatus({ connected: false, ready: false });
     }
 }
 

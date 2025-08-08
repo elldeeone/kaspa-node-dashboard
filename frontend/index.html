@@ -39,6 +39,12 @@
                                 <button class="font-mono text-xs text-zinc-500 cursor-pointer truncate text-left" id="p2pId" title="Click to copy P2P ID" aria-label="Copy P2P ID to clipboard">
                                     P2P ID: Loading...
                                 </button>
+                                <div class="flex items-center gap-2 mt-2">
+                                    <div class="flex items-center gap-1">
+                                        <div id="connectionIndicator" class="w-2 h-2 rounded-full bg-gray-500 animate-pulse" title="Connection status"></div>
+                                        <span class="text-xs text-zinc-400" id="connectionStatus">Connecting...</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="flex-shrink-0 w-full sm:w-auto text-center sm:text-right">

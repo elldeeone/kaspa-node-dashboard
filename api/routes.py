@@ -3,6 +3,7 @@ API routes using persistent RPC client with cached data.
 """
 from fastapi import APIRouter, Depends
 from typing import Dict, Any
+from rate_limiter import rate_limiter, expensive_rate_limiter
 
 def get_persistent_client():
     """Dependency to get the persistent RPC client."""
@@ -207,9 +208,9 @@ def create_router() -> APIRouter:
         }
     
     # New endpoint to get all cached data at once
-    @router.get("/info/all")
+    @router.get("/info/all", dependencies=[Depends(expensive_rate_limiter)])
     async def all_info(client = Depends(get_persistent_client)):
-        """Get all cached data in a single call."""
+        """Get all cached data in a single call. Rate limited due to response size."""
         if not client:
             return {"error": "Client not initialized"}
         

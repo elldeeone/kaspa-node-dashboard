@@ -26,23 +26,34 @@ persistent_client: PersistentKaspadRPCClient = None
 refresh_task: asyncio.Task = None
 
 async def periodic_refresh():
-    """Periodically refresh cached data as a fallback."""
+    """Periodically refresh cached data with intelligent intervals."""
     global persistent_client
     
     while True:
         try:
-            # Refresh more frequently when not connected (during IBD)
             if persistent_client:
-                if not persistent_client.connected:
-                    # During IBD, try to refresh every 5 seconds
+                # Determine refresh interval based on sync status
+                is_synced = persistent_client.is_synced()
+                is_connected = persistent_client.connected
+                
+                if not is_connected:
+                    # During IBD or disconnected, refresh every 5 seconds
                     await persistent_client._refresh_cached_data()
-                    logger.debug("Cache refresh attempted (IBD mode)")
-                    await asyncio.sleep(5)
+                    logger.debug("Cache refresh attempted (disconnected/IBD mode)")
+                    refresh_interval = 5
+                elif not is_synced:
+                    # While syncing but connected, refresh every 10 seconds
+                    await persistent_client._refresh_cached_data()
+                    logger.debug("Cache refresh completed (syncing)")
+                    refresh_interval = 10
                 else:
-                    # When connected, refresh every 30 seconds as backup
+                    # When fully synced, refresh less frequently (60 seconds)
+                    # Events will trigger updates, this is just backup
                     await persistent_client._refresh_cached_data()
-                    logger.debug("Periodic cache refresh completed")
-                    await asyncio.sleep(30)
+                    logger.debug("Periodic cache refresh completed (synced)")
+                    refresh_interval = 60
+                
+                await asyncio.sleep(refresh_interval)
             else:
                 await asyncio.sleep(5)
             
