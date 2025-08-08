@@ -6,15 +6,22 @@ services:
     container_name: kaspad
     restart: on-failure
     stop_grace_period: 1m
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "18110"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     volumes:
       - ${APP_DATA_DIR:-./data}/data:/data
+      - ${APP_DATA_DIR:-./data}/logs:/logs
     ports:
       - 16110:16110  # GRPC
       - 16111:16111  # P2P
       - 17110:17110  # WRPC (Borsh)
       - 18110:18110  # WRPC (JSON)
     command: >
-      kaspad
+      sh -c "kaspad
       --rpclisten=0.0.0.0:16110
       --rpclisten-borsh=0.0.0.0:17110
       --rpclisten-json=0.0.0.0:18110
@@ -22,6 +29,19 @@ services:
       --rpcmaxclients=32
       --maxinpeers=32
       --outpeers=4
+      2>&1 | (
+        BUFFER_FILE=/logs/kaspad_buffer.log
+        BUFFER_SIZE=10000
+        > \$$BUFFER_FILE
+        while IFS= read -r line; do
+          echo \"\$$line\" >> \$$BUFFER_FILE
+          LINE_COUNT=\$$(wc -l < \$$BUFFER_FILE)
+          if [ \$$LINE_COUNT -gt \$$BUFFER_SIZE ]; then
+            tail -n \$$BUFFER_SIZE \$$BUFFER_FILE > \$$BUFFER_FILE.tmp
+            mv \$$BUFFER_FILE.tmp \$$BUFFER_FILE
+          fi
+        done
+      )"
     mem_limit: 8g
     memswap_limit: 8g
     cpu_count: 4
@@ -39,9 +59,28 @@ services:
     container_name: kaspa-api
     restart: on-failure
     stop_grace_period: 1m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/info/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     environment:
       KASPAD_HOST: kaspad
       KASPAD_RPC_PORT: 18110
+      # Optional: Set to "true" for production mode with sanitized errors
+      # PRODUCTION: "false"
+      # Optional: Configure timeouts (in seconds)
+      # CONNECTION_TIMEOUT: 60
+      # SOCKET_READ_TIMEOUT: 30
+      # REQUEST_TIMEOUT: 30
+      # ONESHOT_TIMEOUT: 10
+      # Optional: Configure retry behavior
+      # INITIAL_RETRY_DELAY: 5
+      # MAX_RETRY_DELAY: 60
+      # MAX_CONNECTION_FAILURES: 10
+    volumes:
+      - ${APP_DATA_DIR:-./data}/logs:/logs:ro
     depends_on:
       - kaspad
     networks:
@@ -53,6 +92,12 @@ services:
     container_name: kaspa-frontend
     restart: on-failure
     stop_grace_period: 1m
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4321/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     ports:
       - 4321:4321
     depends_on:

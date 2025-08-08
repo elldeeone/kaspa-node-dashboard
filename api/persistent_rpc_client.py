@@ -10,31 +10,19 @@ from typing import Dict, Any, Optional, Tuple
 import aiohttp
 from datetime import datetime
 from ibd_tracker import IBDProgressTracker
+from log_parser import KaspadLogParser
+from peer_model import PeerInfo, PeerInfoCollection
+from config import (
+    CONNECTION_TIMEOUT, SOCKET_READ_TIMEOUT, HEARTBEAT_INTERVAL,
+    REQUEST_TIMEOUT, CLEANUP_INTERVAL, HEALTH_CHECK_INTERVAL,
+    ONESHOT_TIMEOUT, MAX_ONESHOT_RETRIES,
+    INITIAL_RETRY_DELAY, MAX_RETRY_DELAY, RETRY_BACKOFF_FACTOR,
+    SUBSCRIPTION_RETRY_DELAY, MAX_SUBSCRIPTION_RETRY_DELAY,
+    MAX_CONNECTION_FAILURES, CIRCUIT_BREAKER_COOLDOWN,
+    CONNECTION_POOL_SIZE, CONNECTION_POOL_TIMEOUT
+)
 
 logger = logging.getLogger(__name__)
-
-# Connection Configuration Constants
-CONNECTION_TIMEOUT = 60  # Total connection timeout in seconds
-SOCKET_READ_TIMEOUT = 30  # Socket read timeout in seconds
-HEARTBEAT_INTERVAL = 30  # WebSocket heartbeat interval in seconds
-REQUEST_TIMEOUT = 30.0  # Individual request timeout in seconds
-CLEANUP_INTERVAL = 60.0  # Cleanup old requests every minute
-HEALTH_CHECK_INTERVAL = 30  # Health check interval in seconds
-
-# Retry Configuration Constants
-INITIAL_RETRY_DELAY = 5  # Initial reconnection delay in seconds
-MAX_RETRY_DELAY = 60  # Maximum reconnection delay in seconds
-RETRY_BACKOFF_FACTOR = 1.5  # Exponential backoff multiplier
-SUBSCRIPTION_RETRY_DELAY = 30  # Initial subscription retry delay
-MAX_SUBSCRIPTION_RETRY_DELAY = 300  # Maximum subscription retry delay (5 minutes)
-
-# Circuit Breaker Configuration
-MAX_CONNECTION_FAILURES = 10  # Maximum failures before circuit breaker activates
-CIRCUIT_BREAKER_COOLDOWN = 300  # Cooldown period in seconds (5 minutes)
-
-# Connection Pool Configuration
-CONNECTION_POOL_SIZE = 3  # Number of connections to maintain in pool
-CONNECTION_POOL_TIMEOUT = 30  # Timeout for getting connection from pool
 
 class ConnectionState(Enum):
     """Connection state machine for better state management."""
@@ -73,6 +61,21 @@ class PersistentKaspadRPCClient:
         self.connection_pool = []
         self.pool_lock = asyncio.Lock()
         
+        # Connection pool metrics
+        self.pool_metrics = {
+            "total_connections": 0,
+            "active_connections": 0,
+            "idle_connections": 0,
+            "connection_reuse_count": 0,
+            "connection_creation_count": 0,
+            "failed_connections": 0,
+            "avg_connection_duration": 0,
+            "total_requests": 0,
+            "successful_requests": 0,
+            "failed_requests": 0,
+            "last_updated": time.time()
+        }
+        
         # Circuit breaker for connection failures
         self.connection_failures = 0
         self.last_connection_attempt = 0
@@ -85,6 +88,7 @@ class PersistentKaspadRPCClient:
         # Message handling with cleanup tracking
         self.request_id = 0
         self.pending_requests = {}  # {request_id: (future, timestamp)}
+        self.request_lock = asyncio.Lock()  # Lock to prevent race conditions
         self.request_timeout = REQUEST_TIMEOUT
         self.cleanup_interval = CLEANUP_INTERVAL
         self.last_cleanup = time.time()
@@ -109,6 +113,14 @@ class PersistentKaspadRPCClient:
         
         # IBD progress tracking
         self.ibd_tracker = IBDProgressTracker(network="mainnet")
+        
+        # Log parser for extracting peer info during IBD
+        self.log_parser = KaspadLogParser()
+        
+        # Log parsing cache to reduce file I/O
+        self._log_cache = None
+        self._log_cache_timestamp = 0
+        self._log_cache_ttl = 30  # Cache for 30 seconds
         
     async def connect(self):
         """Establish persistent WebSocket connection with circuit breaker."""
@@ -195,7 +207,16 @@ class PersistentKaspadRPCClient:
         """Handle incoming WebSocket messages."""
         try:
             while self.connected and self.ws:
-                msg = await self.ws.receive()
+                try:
+                    # Add timeout to prevent infinite hangs
+                    msg = await asyncio.wait_for(
+                        self.ws.receive(),
+                        timeout=self.socket_read_timeout
+                    )
+                except asyncio.TimeoutError:
+                    # Timeout is normal - just continue the loop
+                    # This prevents infinite hangs while still maintaining the connection
+                    continue
                 
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     data = json.loads(msg.data)
@@ -203,18 +224,19 @@ class PersistentKaspadRPCClient:
                     # Handle RPC responses
                     if "id" in data:
                         request_id = data["id"]
-                        if request_id in self.pending_requests:
-                            future, _ = self.pending_requests.pop(request_id)
-                            if "error" in data:
-                                error_msg = data.get("error", "Unknown error")
-                                future.set_exception(ConnectionError(f"RPC error: {error_msg}"))
-                            else:
-                                # Basic RPC response validation
-                                result = data.get("params", data)
-                                if self._validate_rpc_response(result):
-                                    future.set_result(result)
+                        async with self.request_lock:
+                            if request_id in self.pending_requests:
+                                future, _ = self.pending_requests.pop(request_id)
+                                if "error" in data:
+                                    error_msg = data.get("error", "Unknown error")
+                                    future.set_exception(ConnectionError(f"RPC error: {error_msg}"))
                                 else:
-                                    future.set_exception(ValueError("Invalid RPC response format"))
+                                    # Basic RPC response validation
+                                    result = data.get("params", data)
+                                    if self._validate_rpc_response(result):
+                                        future.set_result(result)
+                                    else:
+                                        future.set_exception(ValueError("Invalid RPC response format"))
                     
                     # Handle notifications (these come from subscriptions)
                     elif "method" in data:
@@ -277,16 +299,20 @@ class PersistentKaspadRPCClient:
                 current_time = time.time()
                 if current_time - self.last_cleanup > self.cleanup_interval:
                     expired_requests = []
-                    for req_id, (future, timestamp) in self.pending_requests.items():
-                        if current_time - timestamp > self.request_timeout:
-                            expired_requests.append(req_id)
-                            if not future.done():
-                                future.set_exception(asyncio.TimeoutError(f"Request {req_id} timed out"))
                     
-                    for req_id in expired_requests:
-                        self.pending_requests.pop(req_id, None)
-                        logger.debug("Cleaned up expired request",
-                                   extra={"request_id": req_id})
+                    async with self.request_lock:
+                        # Identify expired requests
+                        for req_id, (future, timestamp) in list(self.pending_requests.items()):
+                            if current_time - timestamp > self.request_timeout:
+                                expired_requests.append(req_id)
+                                if not future.done():
+                                    future.set_exception(asyncio.TimeoutError(f"Request {req_id} timed out"))
+                        
+                        # Remove expired requests
+                        for req_id in expired_requests:
+                            self.pending_requests.pop(req_id, None)
+                            logger.debug("Cleaned up expired request",
+                                       extra={"request_id": req_id})
                     
                     if expired_requests:
                         logger.info("Cleaned up expired requests",
@@ -442,6 +468,58 @@ class PersistentKaspadRPCClient:
             logger.error("Error handling notification",
                         extra={"method": method, "error": str(e)}, exc_info=True)
     
+    def _get_cached_log_data(self) -> Dict[str, Any]:
+        """Get log data with caching to reduce file I/O.
+        
+        Returns:
+            Parsed log data from cache or fresh parse
+        """
+        current_time = time.time()
+        
+        # Check if cache is still valid
+        if (self._log_cache is not None and 
+            current_time - self._log_cache_timestamp < self._log_cache_ttl):
+            logger.debug("Using cached log data",
+                        extra={"cache_age": current_time - self._log_cache_timestamp})
+            return self._log_cache
+        
+        # Parse logs and update cache
+        try:
+            logger.debug("Parsing logs (cache miss or expired)")
+            log_data = self.log_parser.parse_logs()
+            
+            # Validate log data structure
+            if not isinstance(log_data, dict):
+                logger.warning("Invalid log data format, using defaults")
+                log_data = {'peer_info': {'peers': [], 'peer_count': 0}, 'uptime': 'Unknown', 'uptime_seconds': 0}
+            if 'peer_info' not in log_data:
+                log_data['peer_info'] = {'peers': [], 'peer_count': 0}
+            if not isinstance(log_data.get('peer_info'), dict):
+                log_data['peer_info'] = {'peers': [], 'peer_count': 0}
+            
+            # Update cache
+            self._log_cache = log_data
+            self._log_cache_timestamp = current_time
+            
+            return log_data
+        except Exception as e:
+            logger.error(f"Error parsing logs: {e}")
+            return {'peer_info': {'peers': [], 'peer_count': 0}, 'uptime': 'Unknown', 'uptime_seconds': 0}
+    
+    def _transform_rpc_peer(self, peer: Dict[str, Any]) -> Dict[str, Any]:
+        """Transform a single RPC peer response to normalized format using PeerInfo model.
+        
+        Args:
+            peer: Raw peer data from RPC response
+            
+        Returns:
+            Normalized peer dictionary
+        """
+        # Use the unified model for transformation
+        peer_info = PeerInfo.from_rpc_data(peer)
+        # Return internal format for backward compatibility
+        return peer_info.to_internal_format()
+    
     async def _fetch_initial_data(self):
         """Fetch initial data to populate cache."""
         await self._refresh_cached_data()
@@ -468,6 +546,8 @@ class PersistentKaspadRPCClient:
                     self._oneshot_call("getBlockDagInfo"),
                     self._oneshot_call("getConnectedPeerInfo"),
                     self._oneshot_call("getMempoolEntries"),
+                    self._oneshot_call("getConnections"),  # Get connection count during IBD
+                    self._oneshot_call("getMetrics", {"connection_metrics": True, "process_metrics": True}),  # Get comprehensive metrics
                     return_exceptions=True
                 )
             else:
@@ -479,20 +559,23 @@ class PersistentKaspadRPCClient:
                     self.call("getBlockDagInfo"),
                     self.call("getConnectedPeerInfo"),
                     self.call("getMempoolEntries"),
+                    self.call("getConnections"),  # Get connection count during IBD
+                    self.call("getMetrics", {"connection_metrics": True, "process_metrics": True}),  # Get comprehensive metrics
                     return_exceptions=True
                 )
             
             # Log results
-            for i, name in enumerate(["node_info", "blockdag_info", "peer_info", "mempool"]):
-                if isinstance(results[i], Exception):
-                    logger.warning("Failed to fetch data",
-                                 extra={"data_type": name, "error": str(results[i])})
-                elif results[i] is None:
-                    logger.warning("Got None for data",
-                                 extra={"data_type": name})
-                else:
-                    logger.debug("Successfully fetched data",
-                               extra={"data_type": name})
+            for i, name in enumerate(["node_info", "blockdag_info", "peer_info", "mempool", "connections", "metrics"]):
+                if i < len(results):
+                    if isinstance(results[i], Exception):
+                        logger.warning("Failed to fetch data",
+                                     extra={"data_type": name, "error": str(results[i])})
+                    elif results[i] is None:
+                        logger.warning("Got None for data",
+                                     extra={"data_type": name})
+                    else:
+                        logger.debug("Successfully fetched data",
+                                   extra={"data_type": name})
             
             # Update cache with successful results
             if results[0] and not isinstance(results[0], Exception):
@@ -502,8 +585,50 @@ class PersistentKaspadRPCClient:
             if results[1] and not isinstance(results[1], Exception):
                 self.cached_data["blockdag_info"] = results[1]
             
-            if results[2] and not isinstance(results[2], Exception):
-                self.cached_data["peer_info"] = results[2]
+            # Handle peer info - merge RPC data with log data if needed
+            peer_info_from_rpc = results[2] if results[2] and not isinstance(results[2], Exception) else None
+            connections_data = results[4] if len(results) > 4 and results[4] and not isinstance(results[4], Exception) else None
+            metrics_data = results[5] if len(results) > 5 and results[5] and not isinstance(results[5], Exception) else None
+            
+            # Get log data with caching
+            log_data = self._get_cached_log_data()
+            
+            # Process and normalize peer information from RPC
+            if peer_info_from_rpc and peer_info_from_rpc.get("peerInfo"):
+                # Transform RPC peer data to expected format
+                transformed_peers = [
+                    self._transform_rpc_peer(peer) 
+                    for peer in peer_info_from_rpc.get("peerInfo", [])
+                ]
+                
+                self.cached_data["peer_info"] = {
+                    "infos": transformed_peers,
+                    "peer_count": len(transformed_peers)
+                }
+            elif connections_data and connections_data.get("peers", 0) > 0:
+                # During IBD, use connection count from getConnections and details from logs
+                peer_list_from_logs = log_data['peer_info'].get('peers', [])
+                self.cached_data["peer_info"] = {
+                    "infos": peer_list_from_logs,
+                    "peer_count": connections_data.get("peers", 0)
+                }
+            else:
+                # Fallback to log data only
+                self.cached_data["peer_info"] = {
+                    "infos": log_data['peer_info'].get('peers', []),
+                    "peer_count": log_data['peer_info'].get('peer_count', 0)
+                }
+            
+            # Store connections and metrics data
+            self.cached_data["connections"] = connections_data
+            self.cached_data["metrics"] = metrics_data
+            
+            # Store uptime from logs
+            self.cached_data["uptime"] = {
+                "uptime_formatted": log_data.get('uptime', 'Unknown'),
+                "uptime_seconds": log_data.get('uptime_seconds', 0),
+                "node_start_time": log_data.get('node_start_time')
+            }
             
             if results[3] and not isinstance(results[3], Exception):
                 self.cached_data["mempool"] = results[3]
@@ -598,8 +723,18 @@ class PersistentKaspadRPCClient:
                 logger.error("Health check error",
                             extra={"error": str(e)}, exc_info=True)
     
-    async def _oneshot_call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
-        """Make a one-shot RPC call using connection pooling."""
+    async def _oneshot_call(self, method: str, params: Optional[Dict[str, Any]] = None, 
+                           retry_count: int = 0) -> Optional[Dict[str, Any]]:
+        """Make a one-shot RPC call with retry logic and timeout recovery.
+        
+        Args:
+            method: RPC method to call
+            params: Method parameters
+            retry_count: Current retry attempt (for internal use)
+            
+        Returns:
+            RPC response or None if failed
+        """
         if params is None:
             params = {}
         
@@ -620,10 +755,17 @@ class PersistentKaspadRPCClient:
         ws = None
         created_new = False
         temp_session = None
+        connection_start_time = time.time()
+        
+        # Track request start
+        self._update_pool_metrics("request_started")
         
         try:
             # Try to get connection from pool first
             ws, created_new = await self._get_connection_from_pool()
+            
+            if ws and not created_new:
+                self._update_pool_metrics("connection_reused")
             
             # Create new connection if needed
             if ws is None:
@@ -641,13 +783,18 @@ class PersistentKaspadRPCClient:
                     timeout=aiohttp.ClientTimeout(total=CONNECTION_POOL_TIMEOUT)
                 )
                 created_new = True
+                self._update_pool_metrics("connection_created")
+                
+                # Track connection duration
+                connection_duration = time.time() - connection_start_time
+                self._update_pool_metrics("connection_duration", duration=connection_duration)
             # Send request
             logger.debug("Sending oneshot request",
                         extra={"method": normalized_method})
             await ws.send_str(json.dumps(payload))
             
-            # Wait for response
-            response = await asyncio.wait_for(ws.receive(), timeout=5.0)
+            # Wait for response with configurable timeout
+            response = await asyncio.wait_for(ws.receive(), timeout=ONESHOT_TIMEOUT)
             
             if response.type == aiohttp.WSMsgType.TEXT:
                 result = json.loads(response.data)
@@ -668,6 +815,9 @@ class PersistentKaspadRPCClient:
                     
                 # Return connection to pool for reuse
                 await self._return_connection_to_pool(ws)
+                
+                # Track successful request
+                self._update_pool_metrics("request_success")
                     
                 return result.get("params", result)
             elif response.type == aiohttp.WSMsgType.CLOSE:
@@ -682,22 +832,44 @@ class PersistentKaspadRPCClient:
                 return None
             
         except asyncio.TimeoutError:
-            logger.error("Oneshot call timeout",
-                        extra={"method": method})
             if ws and not ws.closed:
                 await ws.close()
-            return None
+            
+            # Retry logic for timeout
+            if retry_count < MAX_ONESHOT_RETRIES:
+                logger.warning("Oneshot call timeout, retrying",
+                             extra={"method": method, "retry": retry_count + 1})
+                await asyncio.sleep(INITIAL_RETRY_DELAY * (retry_count + 1))
+                return await self._oneshot_call(method, params, retry_count + 1)
+            else:
+                logger.error("Oneshot call timeout after retries",
+                           extra={"method": method, "retries": retry_count})
+                self._update_pool_metrics("request_failed")
+                return None
+                
         except aiohttp.ClientError as e:
-            logger.error("Oneshot call client error",
-                        extra={"method": method, "error": str(e)})
             if ws and not ws.closed:
                 await ws.close()
-            return None
+            
+            # Retry logic for connection errors
+            if retry_count < MAX_ONESHOT_RETRIES:
+                logger.warning("Oneshot call connection error, retrying",
+                             extra={"method": method, "error": str(e), "retry": retry_count + 1})
+                await asyncio.sleep(INITIAL_RETRY_DELAY * (retry_count + 1))
+                return await self._oneshot_call(method, params, retry_count + 1)
+            else:
+                logger.error("Oneshot call failed after retries",
+                           extra={"method": method, "error": str(e), "retries": retry_count})
+                self._update_pool_metrics("request_failed")
+                self._update_pool_metrics("connection_failed")
+                return None
+                
         except Exception as e:
             logger.error("Oneshot call failed",
                         extra={"method": method, "error": str(e)}, exc_info=True)
             if ws and not ws.closed:
                 await ws.close()
+            self._update_pool_metrics("request_failed")
             return None
         finally:
             if temp_session:
@@ -749,7 +921,8 @@ class PersistentKaspadRPCClient:
         
         # Create future for response with timestamp for cleanup
         future = asyncio.Future()
-        self.pending_requests[request_id] = (future, time.time())
+        async with self.request_lock:
+            self.pending_requests[request_id] = (future, time.time())
         
         try:
             # Send request
@@ -760,12 +933,14 @@ class PersistentKaspadRPCClient:
             return result
             
         except asyncio.TimeoutError:
-            self.pending_requests.pop(request_id, None)
+            async with self.request_lock:
+                self.pending_requests.pop(request_id, None)
             logger.warning("Request timed out",
                           extra={"method": method, "request_id": request_id})
             return None
         except Exception as e:
-            self.pending_requests.pop(request_id, None)
+            async with self.request_lock:
+                self.pending_requests.pop(request_id, None)
             logger.error("Request failed",
                         extra={"method": method, "error": str(e)}, exc_info=True)
             return None
@@ -773,6 +948,44 @@ class PersistentKaspadRPCClient:
     def get_cached_data(self) -> Dict[str, Any]:
         """Get all cached data."""
         return self.cached_data.copy()
+    
+    def get_pool_metrics(self) -> Dict[str, Any]:
+        """Get connection pool metrics."""
+        self.pool_metrics["last_updated"] = time.time()
+        self.pool_metrics["idle_connections"] = len(self.connection_pool)
+        self.pool_metrics["active_connections"] = self.pool_metrics["total_connections"] - self.pool_metrics["idle_connections"]
+        
+        # Calculate success rate
+        total_reqs = self.pool_metrics["total_requests"]
+        if total_reqs > 0:
+            self.pool_metrics["success_rate"] = (self.pool_metrics["successful_requests"] / total_reqs) * 100
+        else:
+            self.pool_metrics["success_rate"] = 0
+            
+        return self.pool_metrics.copy()
+    
+    def _update_pool_metrics(self, event: str, **kwargs):
+        """Update connection pool metrics based on events."""
+        if event == "connection_created":
+            self.pool_metrics["total_connections"] += 1
+            self.pool_metrics["connection_creation_count"] += 1
+        elif event == "connection_reused":
+            self.pool_metrics["connection_reuse_count"] += 1
+        elif event == "connection_failed":
+            self.pool_metrics["failed_connections"] += 1
+        elif event == "request_started":
+            self.pool_metrics["total_requests"] += 1
+        elif event == "request_success":
+            self.pool_metrics["successful_requests"] += 1
+        elif event == "request_failed":
+            self.pool_metrics["failed_requests"] += 1
+        elif event == "connection_duration":
+            # Update average connection duration
+            duration = kwargs.get("duration", 0)
+            current_avg = self.pool_metrics["avg_connection_duration"]
+            count = self.pool_metrics["connection_creation_count"]
+            if count > 0:
+                self.pool_metrics["avg_connection_duration"] = ((current_avg * (count - 1)) + duration) / count
     
     def get_node_info(self) -> Optional[Dict[str, Any]]:
         """Get cached node info."""

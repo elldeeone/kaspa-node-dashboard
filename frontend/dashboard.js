@@ -253,33 +253,45 @@ class KaspaDashboard {
             const row = document.createElement('tr');
             row.className = 'border-b border-zinc-800 hover:bg-zinc-800/50';
             
-            const version = peer.version.includes('kaspad:') ? 
-                peer.version.split('kaspad:')[1].split('/')[0] : 
-                peer.version;
+            // Safely handle version with null checks
+            const rawVersion = peer.version || 'Unknown';
+            const version = rawVersion.includes('kaspad:') ? 
+                rawVersion.split('kaspad:')[1].split('/')[0] : 
+                rawVersion;
                 
-            const pingColor = peer.ping > 1000 ? 'text-red-400' : 
-                             peer.ping > 500 ? 'text-yellow-400' : 'text-green-400';
+            // Safely handle ping with null checks - support both field names
+            const pingValue = peer.pingMs !== undefined && peer.pingMs !== null ? peer.pingMs : 
+                            (peer.ping !== undefined && peer.ping !== null ? peer.ping : 0);
+            const pingColor = pingValue > 1000 ? 'text-red-400' : 
+                             pingValue > 500 ? 'text-yellow-400' : 'text-green-400';
             
-            const directionBadge = peer.is_outbound ? 
+            // Support both field names for outbound
+            const isOutbound = peer.isOutbound !== undefined ? peer.isOutbound : peer.is_outbound;
+            const directionBadge = isOutbound ? 
                 '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-teal-500/50 bg-teal-500/10 text-teal-400">OUT</span>' :
                 '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-purple-500/50 bg-purple-500/10 text-purple-400">IN</span>';
             
-            // Add IBD tag if this is an IBD peer
-            const ibdTag = peer.is_ibd ? 
+            // Add IBD tag if this is an IBD peer - support both field names
+            const isIBD = peer.isIbdPeer !== undefined ? peer.isIbdPeer : peer.is_ibd;
+            const ibdTag = isIBD ? 
                 '<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-orange-500/50 bg-orange-500/10 text-orange-400 ml-1">IBD</span>' : '';
             
-            const peerAddress = `${peer.ip}:${peer.port}`;
+            const peerAddress = peer.address || `${peer.ip}:${peer.port}`;
+            
+            // Safely format version display
+            const displayVersion = version === 'Unknown' ? version : 
+                                  (version.startsWith('v') ? version : 'v' + version);
             
             row.innerHTML = `
                 <td class="py-3 px-2 font-mono text-sm text-zinc-300">${peerAddress}${ibdTag}</td>
                 <td class="py-3 px-2">
                     <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-zinc-700 text-zinc-300">
-                        v${version}
+                        ${displayVersion}
                     </span>
                 </td>
                 <td class="py-3 px-2 text-center">${directionBadge}</td>
-                <td class="py-3 px-2 text-right font-medium ${pingColor}">${peer.ping}ms</td>
-                <td class="py-3 px-2 text-right text-zinc-400 text-sm">${this.formatDuration(peer.connected_time)}</td>
+                <td class="py-3 px-2 text-right font-medium ${pingColor}">${pingValue}ms</td>
+                <td class="py-3 px-2 text-right text-zinc-400 text-sm">${this.formatDuration(peer.connected_time || 0)}</td>
             `;
             
             container.appendChild(row);
@@ -322,38 +334,54 @@ class KaspaDashboard {
     }
     
     /**
-     * Main data fetching and update function
+     * Main data fetching and update function - optimized to use single API call
      */
     async fetchData() {
         try {
-            // First check connection status
-            const connectionResponse = await fetch('/api/info/connection');
-            if (connectionResponse.ok) {
-                const connectionData = await connectionResponse.json();
-                this.updateConnectionStatus(connectionData);
-            }
+            // Single optimized API call for all dashboard data
+            const response = await fetch('/api/info/dashboard');
             
-            const [kaspadResponse, blockdagResponse, peersResponse] = await Promise.all([
-                fetch('/api/info/kaspad'),
-                fetch('/api/info/blockdag'),
-                fetch('/api/info/peers')
-            ]);
-            
-            if (!kaspadResponse.ok || !blockdagResponse.ok || !peersResponse.ok) {
+            if (!response.ok) {
                 throw new Error('API request failed');
             }
             
-            const kaspadData = await kaspadResponse.json();
-            const blockdagData = await blockdagResponse.json();
-            const peersData = await peersResponse.json();
+            const data = await response.json();
             
-            // Update connection status to show we're connected and receiving data
-            this.updateConnectionStatus({ connected: true, ready: true });
+            // Update all dashboard sections with the batched data
+            this.updateConnectionStatus(data.connection);
             
-            this.updateNodeStatus(kaspadData);
-            this.updateSyncProgress(kaspadData.syncProgress || {});
-            this.updateBlockchainStats(kaspadData, blockdagData);
-            this.updateNetworkStats(peersData);
+            // Update node status with kaspad data
+            this.updateNodeStatus({
+                version: data.kaspad.version,
+                serverVersion: data.kaspad.version,
+                protocolVersion: data.kaspad.protocolVersion,
+                network: data.kaspad.network,
+                isSynced: data.kaspad.isSynced,
+                isUtxoIndexed: data.kaspad.isUtxoIndexed,
+                p2pId: data.kaspad.p2pId,
+                mempoolSize: data.mempool.size,
+                syncProgress: data.syncProgress,
+                uptime: data.kaspad.uptime,
+                latest_block: data.latestBlock
+            });
+            
+            this.updateSyncProgress(data.syncProgress);
+            
+            // Update blockchain stats
+            this.updateBlockchainStats(
+                { mempoolSize: data.mempool.size },
+                data.blockdag
+            );
+            
+            // Update network stats with peer data
+            this.updateNetworkStats({
+                total: data.peers.total,
+                inbound: data.peers.inbound,
+                outbound: data.peers.outbound,
+                averagePing: data.peers.averagePing,
+                ibdPeerCount: data.peers.ibdPeerCount,
+                peers: data.peers.details
+            });
             
             this.elements.lastUpdate.textContent = new Date().toLocaleString();
             
@@ -476,13 +504,14 @@ class KaspaDashboard {
      * Update network statistics section
      */
     updateNetworkStats(peersData) {
-        const peerCount = peersData.peerCount || 0;
-        const outbound = peersData.outboundPeers || 0;
-        const inbound = peersData.inboundPeers || 0;
+        const peerCount = peersData.total || peersData.peerCount || 0;
+        const outbound = peersData.outbound || peersData.outboundPeers || 0;
+        const inbound = peersData.inbound || peersData.inboundPeers || 0;
+        const ibdPeerCount = peersData.ibdPeerCount || peersData.ibdPeers || 0;
         
         this.elements.connectedPeers.textContent = peerCount;
         this.elements.peerDirection.textContent = `${outbound} Out / ${inbound} In`;
-        this.elements.ibdPeers.textContent = `${peersData.ibdPeers || 0} IBD peers`;
+        this.elements.ibdPeers.textContent = `${ibdPeerCount} IBD peers`;
         this.elements.averagePing.textContent = peersData.averagePing ? `${peersData.averagePing}ms` : 'N/A';
         
         // Update new elements
