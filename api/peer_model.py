@@ -58,17 +58,17 @@ class PeerInfo:
         ip = addr.get("ip", "")
         port = addr.get("port", 0)
         
-        # Convert ping from microseconds to milliseconds with precision
-        ping_us = rpc_peer.get("last_ping_duration", 0)
-        ping_ms = round(ping_us / 1000, 1) if ping_us else 0.0
+        # Ping duration is in milliseconds from the RPC
+        ping_ms = rpc_peer.get("last_ping_duration", 0)
+        ping_ms = round(ping_ms, 1) if ping_ms else 0.0
         
         # Extract version from user agent
         user_agent = rpc_peer.get("user_agent", "")
         version = cls._extract_version_from_user_agent(user_agent)
         
-        # Convert time_connected from microseconds to seconds
-        time_connected_us = rpc_peer.get("time_connected", 0)
-        connection_duration = time_connected_us // 1000000 if time_connected_us else 0
+        # Convert time_connected from milliseconds to seconds
+        time_connected_ms = rpc_peer.get("time_connected", 0)
+        connection_duration = time_connected_ms // 1000 if time_connected_ms else 0
         
         return cls(
             id=rpc_peer.get("id", ""),
@@ -192,7 +192,7 @@ class PeerInfo:
             
             # Performance
             "ping": self.ping_ms,
-            "lastPingDuration": int(self.ping_ms * 1000),  # Convert back to microseconds
+            "lastPingDuration": self.ping_ms,  # Keep in milliseconds
             
             # Version
             "version": self.version,

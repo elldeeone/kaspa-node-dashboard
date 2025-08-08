@@ -318,18 +318,16 @@ def create_router() -> APIRouter:
                     else:
                         inbound_count += 1
                         
-                    # Calculate ping
-                    ping_ms = None
-                    last_ping = p.get("lastPingDuration", 0)
-                    if last_ping and last_ping > 0:
-                        if last_ping < 1000:
-                            ping_ms = last_ping
-                        else:
-                            ping_ms = last_ping / 1_000_000
-                            
-                    if ping_ms and ping_ms > 0:
+                    # Get ping value - it's already in milliseconds from PeerInfo model
+                    # The field is 'ping' from to_internal_format() method
+                    ping_ms = p.get("ping", 0)
+                    
+                    # Filter out invalid or placeholder ping values
+                    if ping_ms and ping_ms > 0 and ping_ms < 10000:  # Less than 10 seconds is reasonable
                         total_ping += ping_ms
                         valid_ping_count += 1
+                    else:
+                        ping_ms = None  # Set to None if invalid
                     
                     # Extract peer info
                     peer_data = {
@@ -341,7 +339,8 @@ def create_router() -> APIRouter:
                         "pingMs": round(ping_ms, 2) if ping_ms else None,
                         "lastPingTime": p.get("lastPingTime"),
                         "timeOffset": p.get("timeOffset", 0),
-                        "userAgent": p.get("userAgent", "")
+                        "userAgent": p.get("userAgent", ""),
+                        "connected_time": p.get("connectedTime", p.get("connected_time", 0))
                     }
                     peers.append(peer_data)
             
