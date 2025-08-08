@@ -2,11 +2,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install required packages including Docker CLI
-RUN apt-get update && \
-    apt-get install -y docker.io && \
-    rm -rf /var/lib/apt/lists/* && \
-    pip install fastapi uvicorn aiohttp
+# Install required Python packages
+RUN pip install fastapi uvicorn aiohttp
 
 # Copy the API server code
 COPY *.py .

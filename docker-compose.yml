@@ -19,6 +19,18 @@ services:
       --rpclisten-borsh=0.0.0.0:17110
       --rpclisten-json=0.0.0.0:18110
       --loglevel=info
+      --rpcmaxclients=32
+      --maxinpeers=32
+      --outpeers=4
+    mem_limit: 8g
+    memswap_limit: 8g
+    cpu_count: 4
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    sysctls:
+      - net.core.somaxconn=65535
     networks:
       - kaspa-net
 
@@ -30,9 +42,6 @@ services:
     environment:
       KASPAD_HOST: kaspad
       KASPAD_RPC_PORT: 18110
-      KASPAD_CONTAINER_NAME: kaspad
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock  # For log parsing
     depends_on:
       - kaspad
     networks:
