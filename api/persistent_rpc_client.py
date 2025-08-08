@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Dict, Any, Optional, Tuple
 import aiohttp
 from datetime import datetime
-from ibd_tracker import IBDProgressTracker
+from log_sync_analyzer import LogSyncAnalyzer
 from log_parser import KaspadLogParser
 from peer_model import PeerInfo, PeerInfoCollection
 from config import (
@@ -111,8 +111,8 @@ class PersistentKaspadRPCClient:
         self.subscription_retry_delay = SUBSCRIPTION_RETRY_DELAY
         self.subscription_retry_task = None
         
-        # IBD progress tracking
-        self.ibd_tracker = IBDProgressTracker(network="mainnet")
+        # Log-based sync progress tracking
+        self.log_sync_analyzer = LogSyncAnalyzer()
         
         # Log parser for extracting peer info during IBD
         self.log_parser = KaspadLogParser()
@@ -682,18 +682,16 @@ class PersistentKaspadRPCClient:
             if results[3] and not isinstance(results[3], Exception):
                 self.cached_data["mempool"] = results[3]
             
-            # Calculate sync status using IBD tracker
-            if self.cached_data["node_info"] and self.cached_data["blockdag_info"]:
-                # Use IBD tracker for accurate phase detection and progress
-                # Pass server_info and network_daa for actual network DAA score
-                sync_progress = self.ibd_tracker.get_sync_progress(
-                    self.cached_data["node_info"],
-                    self.cached_data["blockdag_info"],
-                    self.cached_data.get("server_info"),
-                    self.cached_data.get("network_daa")
-                )
-                
-                self.cached_data["sync_status"] = sync_progress
+            # Get sync status from log analysis
+            sync_progress = self.log_sync_analyzer.get_sync_status()
+            
+            # Merge with node sync status if available
+            if self.cached_data["node_info"]:
+                node_is_synced = self.cached_data["node_info"].get("isSynced", False)
+                # If logs say we're synced or node says we're synced, we're synced
+                sync_progress["is_synced"] = sync_progress.get("is_synced", False) or node_is_synced
+            
+            self.cached_data["sync_status"] = sync_progress
             
             self.cached_data["last_update"] = datetime.now().isoformat()
             logger.info("Cache refresh complete",

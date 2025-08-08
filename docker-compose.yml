@@ -20,9 +20,6 @@ services:
       --rpclisten-borsh=0.0.0.0:17110
       --rpclisten-json=0.0.0.0:18110
       --loglevel=info
-      --rpcmaxclients=32
-      --maxinpeers=32
-      --outpeers=4
       2>&1 | (
         BUFFER_FILE=/logs/kaspad_buffer.log
         BUFFER_SIZE=10000
@@ -36,15 +33,6 @@ services:
           fi
         done
       )"
-    mem_limit: 8g
-    memswap_limit: 8g
-    cpu_count: 4
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    sysctls:
-      - net.core.somaxconn=65535
     networks:
       - kaspa-net
 
@@ -56,17 +44,6 @@ services:
     environment:
       KASPAD_HOST: kaspad
       KASPAD_RPC_PORT: 18110
-      # Optional: Set to "true" for production mode with sanitized errors
-      # PRODUCTION: "false"
-      # Optional: Configure timeouts (in seconds)
-      # CONNECTION_TIMEOUT: 60
-      # SOCKET_READ_TIMEOUT: 30
-      # REQUEST_TIMEOUT: 30
-      # ONESHOT_TIMEOUT: 10
-      # Optional: Configure retry behavior
-      # INITIAL_RETRY_DELAY: 5
-      # MAX_RETRY_DELAY: 60
-      # MAX_CONNECTION_FAILURES: 10
     volumes:
       - ${APP_DATA_DIR:-./data}/logs:/logs:ro
     depends_on:
