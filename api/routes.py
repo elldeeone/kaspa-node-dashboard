@@ -396,15 +396,8 @@ def create_router() -> APIRouter:
             "latestBlock": client.cached_data.get("latest_block")
             }
             
-            # Return with cache-control headers to prevent browser caching
-            return JSONResponse(
-                content=response_data,
-                headers={
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache",
-                    "Expires": "0"
-                }
-            )
+            # Return response data - cache headers handled by Nginx
+            return response_data
         except Exception as e:
             # Return safe error for dashboard - don't raise exception to keep dashboard functional
             error_response = sanitizer.create_safe_error_response(
@@ -423,15 +416,8 @@ def create_router() -> APIRouter:
                 "peers": {"total": 0, "details": []},
                 "mempool": {"size": 0, "entries": []}
             }
-            # Return error with cache-control headers
-            return JSONResponse(
-                content=error_data,
-                headers={
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache",
-                    "Expires": "0"
-                }
-            )
+            # Return error response - cache headers handled by Nginx
+            return error_data
     
     # New endpoint to check connection status
     @router.get("/info/connection")

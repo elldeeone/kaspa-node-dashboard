@@ -607,14 +607,22 @@ class PersistentKaspadRPCClient:
                 )
             
             # Log results
+            is_syncing = not self.cached_data.get("is_synced", False)
+            expected_none_during_sync = ["mempool", "connections", "metrics"]
+            
             for i, name in enumerate(["node_info", "blockdag_info", "peer_info", "mempool", "connections", "metrics", "server_info"]):
                 if i < len(results):
                     if isinstance(results[i], Exception):
                         logger.warning("Failed to fetch data",
                                      extra={"data_type": name, "error": str(results[i])})
                     elif results[i] is None:
-                        logger.warning("Got None for data",
-                                     extra={"data_type": name})
+                        # Use debug level for expected None results during sync
+                        if is_syncing and name in expected_none_during_sync:
+                            logger.debug("Data unavailable during sync (expected)",
+                                       extra={"data_type": name})
+                        else:
+                            logger.warning("Got None for data",
+                                         extra={"data_type": name})
                     else:
                         logger.debug("Successfully fetched data",
                                    extra={"data_type": name})
@@ -873,8 +881,21 @@ class PersistentKaspadRPCClient:
                            extra={"method": method})
                 
                 if "error" in result:
-                    logger.warning("RPC Error in oneshot call",
-                                 extra={"method": method, "error": result['error']})
+                    # Use debug level for expected errors during sync
+                    is_syncing = not self.cached_data.get("is_synced", False)
+                    expected_sync_errors = [
+                        "getMempoolEntries",  # Mempool unavailable during IBD
+                        "getConnections",     # Limited during sync
+                        "getMetrics"          # Some metrics unavailable
+                    ]
+                    
+                    if is_syncing and method in expected_sync_errors:
+                        logger.debug("RPC method unavailable during sync (expected)",
+                                   extra={"method": method, "error": result['error']})
+                    else:
+                        logger.warning("RPC Error in oneshot call",
+                                     extra={"method": method, "error": result['error']})
+                    
                     # Don't return connection to pool if there was an error
                     if ws and not ws.closed:
                         await ws.close()
