@@ -12,6 +12,7 @@ from datetime import datetime
 from log_sync_analyzer import LogSyncAnalyzer
 from log_parser import KaspadLogParser
 from peer_model import PeerInfo, PeerInfoCollection
+from utils import get_container_uptime
 from config import (
     CONNECTION_TIMEOUT, SOCKET_READ_TIMEOUT, HEARTBEAT_INTERVAL,
     REQUEST_TIMEOUT, CLEANUP_INTERVAL, HEALTH_CHECK_INTERVAL,
@@ -672,11 +673,12 @@ class PersistentKaspadRPCClient:
             network_daa = await self._fetch_network_daa_from_api()
             self.cached_data["network_daa"] = network_daa
             
-            # Store uptime from logs
+            # Get container uptime directly from /proc/uptime
+            uptime_seconds, uptime_formatted = get_container_uptime()
             self.cached_data["uptime"] = {
-                "uptime_formatted": log_data.get('uptime', 'Unknown'),
-                "uptime_seconds": log_data.get('uptime_seconds', 0),
-                "node_start_time": log_data.get('node_start_time')
+                "uptime_formatted": uptime_formatted,
+                "uptime_seconds": uptime_seconds,
+                "node_start_time": None  # We don't have exact start time, but uptime is accurate
             }
             
             if results[3] and not isinstance(results[3], Exception):
@@ -688,8 +690,27 @@ class PersistentKaspadRPCClient:
             # Merge with node sync status if available
             if self.cached_data["node_info"]:
                 node_is_synced = self.cached_data["node_info"].get("isSynced", False)
-                # If logs say we're synced or node says we're synced, we're synced
-                sync_progress["is_synced"] = sync_progress.get("is_synced", False) or node_is_synced
+                
+                # If node reports synced, override log-based progress
+                if node_is_synced:
+                    sync_progress["is_synced"] = True
+                    sync_progress["percentage"] = 100
+                    sync_progress["phase"] = "Sync Complete"
+                    sync_progress["sub_phase"] = "complete"
+                    
+                    # Get block count for complete message
+                    block_count = 0
+                    if self.cached_data["blockdag_info"]:
+                        block_count = self.cached_data["blockdag_info"].get("blockCount", 0)
+                    
+                    sync_progress["details"] = f"Node fully synced with {block_count:,} blocks"
+                    
+                    # Clear any error state when synced
+                    if "error" in sync_progress:
+                        del sync_progress["error"]
+                else:
+                    # If logs say we're synced but node says we're not, trust the node
+                    sync_progress["is_synced"] = False
             
             self.cached_data["sync_status"] = sync_progress
             

@@ -92,6 +92,59 @@ def format_uptime(seconds: int) -> str:
     else:
         return f"{secs}s"
 
+def get_container_uptime() -> tuple:
+    """
+    Get the container's uptime by calculating from PID 1's start time.
+    Returns tuple of (uptime_seconds, uptime_formatted).
+    
+    This works by finding when PID 1 (the container's init process) started,
+    which effectively gives us the container start time without needing Docker socket access.
+    """
+    import os
+    import time
+    
+    try:
+        # Get system boot time from /proc/stat
+        boot_time = 0
+        with open('/proc/stat', 'r') as f:
+            for line in f:
+                if line.startswith('btime'):
+                    boot_time = int(line.split()[1])
+                    break
+        
+        if boot_time == 0:
+            raise ValueError("Could not find boot time in /proc/stat")
+        
+        # Get PID 1 start time in clock ticks from /proc/1/stat
+        with open('/proc/1/stat', 'r') as f:
+            # The stat file format has the command name in parentheses, 
+            # so we split after the last ')' to get the numeric fields
+            stat_data = f.read()
+            # Find the last ) to handle commands with ) in their name
+            last_paren = stat_data.rfind(')')
+            fields = stat_data[last_paren + 1:].split()
+            starttime_ticks = int(fields[19])  # 22nd field (0-indexed as 19 after command name)
+        
+        # Convert ticks to seconds
+        clock_ticks_per_sec = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+        starttime_seconds = starttime_ticks / clock_ticks_per_sec
+        
+        # Calculate actual start time
+        pid1_start_time = boot_time + starttime_seconds
+        
+        # Calculate uptime
+        current_time = time.time()
+        uptime_seconds = int(current_time - pid1_start_time)
+        
+        # Format the uptime
+        uptime_formatted = format_uptime(uptime_seconds)
+        
+        return uptime_seconds, uptime_formatted
+        
+    except Exception as e:
+        logger.debug(f"Could not calculate container uptime: {e}")
+        return 0, "Unknown"
+
 def format_timestamp(timestamp_ms: int) -> str:
     """Format timestamp from milliseconds to readable string."""
     if timestamp_ms <= 0:
