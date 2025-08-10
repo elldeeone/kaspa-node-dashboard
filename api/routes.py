@@ -2,6 +2,7 @@
 API routes using persistent RPC client with cached data.
 """
 from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi.responses import JSONResponse
 from typing import Dict, Any
 from rate_limiter import rate_limiter, expensive_rate_limiter
 from peer_model import PeerInfo, PeerInfoCollection
@@ -347,7 +348,7 @@ def create_router() -> APIRouter:
             avg_ping = round(total_ping / valid_ping_count, 2) if valid_ping_count > 0 else None
             
             # Build comprehensive response
-            return {
+            response_data = {
             "connection": {
                 "connected": client.connected,
                 "ready": client.state.value == "ready" or client.state.value == "subscribed",
@@ -394,6 +395,16 @@ def create_router() -> APIRouter:
             "lastUpdate": client.cached_data.get("last_update"),
             "latestBlock": client.cached_data.get("latest_block")
             }
+            
+            # Return with cache-control headers to prevent browser caching
+            return JSONResponse(
+                content=response_data,
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
         except Exception as e:
             # Return safe error for dashboard - don't raise exception to keep dashboard functional
             error_response = sanitizer.create_safe_error_response(
@@ -402,7 +413,7 @@ def create_router() -> APIRouter:
                 is_production=IS_PRODUCTION,
                 context={"endpoint": "dashboard"}
             )
-            return {
+            error_data = {
                 "error": True,
                 "message": error_response["message"],
                 "connection": {"connected": False, "ready": False, "state": "error"},
@@ -412,6 +423,15 @@ def create_router() -> APIRouter:
                 "peers": {"total": 0, "details": []},
                 "mempool": {"size": 0, "entries": []}
             }
+            # Return error with cache-control headers
+            return JSONResponse(
+                content=error_data,
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
     
     # New endpoint to check connection status
     @router.get("/info/connection")

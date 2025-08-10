@@ -338,8 +338,8 @@ class KaspaDashboard {
      */
     async fetchData() {
         try {
-            // Single optimized API call for all dashboard data
-            const response = await fetch('/api/info/dashboard');
+            // Single optimized API call for all dashboard data with cache busting
+            const response = await fetch(`/api/info/dashboard?t=${Date.now()}`);
             
             if (!response.ok) {
                 throw new Error('API request failed');
