@@ -1,13 +1,18 @@
+FROM node:23-alpine AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
 FROM nginx:1.27.4-alpine
 
-# Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copy the web dashboard files
-COPY index.html custom.css dashboard.js kaspa-glow.png /usr/share/nginx/html/
+EXPOSE 4321
 
-# Expose port 8080
-EXPOSE 8080
-
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"] 
+CMD ["nginx", "-g", "daemon off;"]

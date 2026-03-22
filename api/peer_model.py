@@ -41,6 +41,12 @@ class PeerInfo:
     @property
     def address(self) -> str:
         """Get formatted address string."""
+        if not self.ip:
+            return ""
+        if self.port <= 0:
+            return self.ip
+        if ":" in self.ip and not self.ip.startswith("["):
+            return f"[{self.ip}]:{self.port}"
         return f"{self.ip}:{self.port}"
     
     @classmethod
@@ -53,34 +59,31 @@ class PeerInfo:
         Returns:
             Normalized PeerInfo instance
         """
-        # Extract address components
-        addr = rpc_peer.get("address", {})
-        ip = addr.get("ip", "")
-        port = addr.get("port", 0)
-        
-        # Ping duration is in milliseconds from the RPC
-        ping_ms = rpc_peer.get("last_ping_duration", 0)
+        ip, port = cls._parse_rpc_address(rpc_peer.get("address", ""))
+
+        ping_ms = rpc_peer.get("lastPingDuration", rpc_peer.get("last_ping_duration", 0))
         ping_ms = round(ping_ms, 1) if ping_ms else 0.0
-        
-        # Extract version from user agent
-        user_agent = rpc_peer.get("user_agent", "")
+
+        user_agent = rpc_peer.get("userAgent", rpc_peer.get("user_agent", ""))
         version = cls._extract_version_from_user_agent(user_agent)
-        
-        # Convert time_connected from milliseconds to seconds
-        time_connected_ms = rpc_peer.get("time_connected", 0)
-        connection_duration = time_connected_ms // 1000 if time_connected_ms else 0
+
+        time_connected = rpc_peer.get("timeConnected", rpc_peer.get("time_connected", 0))
+        connection_duration = int(time_connected) if time_connected else 0
         
         return cls(
-            id=rpc_peer.get("id", ""),
+            id=str(rpc_peer.get("id", "")),
             ip=ip,
-            port=port,
-            is_outbound=rpc_peer.get("is_outbound", True),
-            is_ibd=rpc_peer.get("is_ibd_peer", False),
+            port=int(port) if port else 0,
+            is_outbound=rpc_peer.get("isOutbound", rpc_peer.get("is_outbound", True)),
+            is_ibd=rpc_peer.get("isIbdPeer", rpc_peer.get("is_ibd_peer", False)),
             connection_duration_seconds=connection_duration,
             ping_ms=ping_ms,
             version=version,
             user_agent=user_agent,
-            protocol_version=rpc_peer.get("advertised_protocol_version", 0)
+            protocol_version=rpc_peer.get(
+                "advertisedProtocolVersion",
+                rpc_peer.get("advertised_protocol_version", 0),
+            ),
         )
     
     @classmethod
@@ -137,13 +140,25 @@ class PeerInfo:
         Returns:
             Normalized PeerInfo instance
         """
-        # Detect format based on key presence
-        if "address" in peer and isinstance(peer["address"], dict):
-            # RPC format (address is an object with ip/port)
+        rpc_keys = {
+            "userAgent",
+            "user_agent",
+            "advertisedProtocolVersion",
+            "advertised_protocol_version",
+            "isOutbound",
+            "is_outbound",
+            "isIbdPeer",
+            "is_ibd_peer",
+            "lastPingDuration",
+            "last_ping_duration",
+            "timeConnected",
+            "time_connected",
+        }
+
+        if "address" in peer and (isinstance(peer["address"], dict) or any(key in peer for key in rpc_keys)):
             return cls.from_rpc_data(peer)
-        else:
-            # Log format or already transformed
-            return cls.from_log_data(peer)
+
+        return cls.from_log_data(peer)
     
     def to_api_response(self) -> Dict[str, Any]:
         """Convert to API response format for frontend consumption.
@@ -227,6 +242,27 @@ class PeerInfo:
                 logger.debug(f"Failed to parse version from user agent: {user_agent}")
         
         return "Unknown"
+
+    @staticmethod
+    def _parse_rpc_address(address: Any) -> tuple[str, int]:
+        """Parse RPC peer addresses from either object or string form."""
+        if isinstance(address, dict):
+            return address.get("ip", ""), int(address.get("port", 0) or 0)
+
+        if not isinstance(address, str) or not address:
+            return "", 0
+
+        if address.startswith("[") and "]" in address:
+            host, _, port_part = address[1:].partition("]")
+            if port_part.startswith(":") and port_part[1:].isdigit():
+                return host, int(port_part[1:])
+            return host, 0
+
+        host, sep, port_part = address.rpartition(":")
+        if sep and port_part.isdigit():
+            return host, int(port_part)
+
+        return address, 0
 
 
 class PeerInfoCollection:

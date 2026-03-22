@@ -193,7 +193,8 @@ class PersistentKaspadRPCClient:
             # Initial data fetch
             await self._fetch_initial_data()
             
-            self.state = ConnectionState.READY
+            if self.state != ConnectionState.SUBSCRIBED:
+                self.state = ConnectionState.READY
             return True
             
         except aiohttp.ClientError as e:
@@ -644,11 +645,19 @@ class PersistentKaspadRPCClient:
             log_data = self._get_cached_log_data()
             
             # Process and normalize peer information from RPC
-            if peer_info_from_rpc and peer_info_from_rpc.get("peerInfo"):
+            rpc_peers = None
+            if peer_info_from_rpc:
+                rpc_peers = (
+                    peer_info_from_rpc.get("infos")
+                    or peer_info_from_rpc.get("peerInfo")
+                    or peer_info_from_rpc.get("peer_info")
+                )
+
+            if rpc_peers:
                 # Transform RPC peer data to expected format
                 transformed_peers = [
                     self._transform_rpc_peer(peer) 
-                    for peer in peer_info_from_rpc.get("peerInfo", [])
+                    for peer in rpc_peers
                 ]
                 
                 self.cached_data["peer_info"] = {
@@ -1098,6 +1107,10 @@ class PersistentKaspadRPCClient:
     def get_sync_status(self) -> Optional[Dict[str, Any]]:
         """Get cached sync status."""
         return self.cached_data.get("sync_status")
+
+    def get_server_info(self) -> Optional[Dict[str, Any]]:
+        """Get cached server info."""
+        return self.cached_data.get("server_info")
     
     def is_synced(self) -> bool:
         """Check if node is synced."""

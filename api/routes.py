@@ -49,6 +49,24 @@ def _extract_peer_version(peer: Dict[str, Any]) -> str:
     # Return as-is if no special parsing needed
     return user_agent if user_agent else "Unknown"
 
+
+def _get_network_id(node_info: Dict[str, Any] | None, server_info: Dict[str, Any] | None) -> str:
+    """Resolve network id from the correct RPC payload with safe fallbacks."""
+    if server_info and server_info.get("networkId"):
+        return server_info["networkId"]
+    if node_info and node_info.get("networkId"):
+        return node_info["networkId"]
+    return "kaspa-mainnet"
+
+
+def _get_utxo_index_state(node_info: Dict[str, Any] | None, server_info: Dict[str, Any] | None) -> bool:
+    """Resolve UTXO index state from the correct RPC payload with safe fallbacks."""
+    if node_info and "isUtxoIndexed" in node_info:
+        return bool(node_info["isUtxoIndexed"])
+    if server_info and "hasUtxoIndex" in server_info:
+        return bool(server_info["hasUtxoIndex"])
+    return False
+
 def create_router() -> APIRouter:
     """Create and configure API router with persistent client."""
     router = APIRouter()
@@ -124,6 +142,7 @@ def create_router() -> APIRouter:
             return {"error": "Client not initialized"}
         
         node_info = client.get_node_info()
+        server_info = client.get_server_info()
         sync_status = client.get_sync_status()
         
         if not node_info:
@@ -134,9 +153,9 @@ def create_router() -> APIRouter:
             "version": node_info.get("serverVersion", "Unknown"),  # Frontend expects 'version'
             "serverVersion": node_info.get("serverVersion", "Unknown"),
             "protocolVersion": node_info.get("protocolVersion", 0),
-            "network": node_info.get("networkId", "kaspa-mainnet"),
+            "network": _get_network_id(node_info, server_info),
             "isSynced": client.is_synced(),
-            "isUtxoIndexed": node_info.get("hasUtxoIndex", False),
+            "isUtxoIndexed": _get_utxo_index_state(node_info, server_info),
             "p2pId": node_info.get("p2pId", ""),
             "mempoolSize": len(client.get_mempool().get("entries", [])) if client.get_mempool() else 0,
             "syncProgress": sync_status,  # This now includes phase, percentage, details from IBD tracker
@@ -178,6 +197,7 @@ def create_router() -> APIRouter:
         peer_info = client.get_peer_info()
         mempool = client.get_mempool()
         node_info = client.get_node_info()
+        server_info = client.get_server_info()
         
         peer_count = len(peer_info.get("infos", [])) if peer_info else 0
         mempool_size = len(mempool.get("entries", [])) if mempool else 0
@@ -185,7 +205,7 @@ def create_router() -> APIRouter:
         return {
             "connectedPeers": peer_count,
             "mempoolSize": mempool_size,
-            "networkName": node_info.get("networkId", "kaspa-mainnet") if node_info else "kaspa-mainnet",
+            "networkName": _get_network_id(node_info, server_info),
             "status": "connected" if client.connected else "disconnected",
             "cached": True,
             "last_update": client.cached_data.get("last_update")
@@ -299,6 +319,7 @@ def create_router() -> APIRouter:
             
             # Gather all data
             node_info = client.get_node_info()
+            server_info = client.get_server_info()
             sync_status = client.get_sync_status()
             blockdag = client.get_blockdag_info()
             peer_info = client.get_peer_info()
@@ -352,14 +373,15 @@ def create_router() -> APIRouter:
             "connection": {
                 "connected": client.connected,
                 "ready": client.state.value == "ready" or client.state.value == "subscribed",
+                "subscribed": client.state.value == "subscribed",
                 "state": client.state.value
             },
             "kaspad": {
                 "version": node_info.get("serverVersion", "Unknown") if node_info else "Unknown",
                 "protocolVersion": node_info.get("protocolVersion", 0) if node_info else 0,
-                "network": node_info.get("networkId", "kaspa-mainnet") if node_info else "kaspa-mainnet",
+                "network": _get_network_id(node_info, server_info),
                 "isSynced": client.is_synced(),
-                "isUtxoIndexed": node_info.get("hasUtxoIndex", False) if node_info else False,
+                "isUtxoIndexed": _get_utxo_index_state(node_info, server_info),
                 "p2pId": node_info.get("p2pId", "") if node_info else "",
                 "uptime": client.cached_data.get("uptime", {})
             },
@@ -380,7 +402,7 @@ def create_router() -> APIRouter:
                 "blueScore": sync_status.get("headers", 0) if sync_status else 0
             },
             "peers": {
-                "total": len(peers),
+                "total": max(peer_info.get("peer_count", 0), len(peers)) if peer_info else len(peers),
                 "inbound": inbound_count,
                 "outbound": outbound_count,
                 "averagePing": avg_ping,
