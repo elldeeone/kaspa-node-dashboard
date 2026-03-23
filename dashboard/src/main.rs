@@ -37,11 +37,12 @@ async fn main() -> Result<()> {
     let config = Config::from_env()?;
     let snapshots = SnapshotStore::new(DashboardSnapshot::default());
     let client = service::connect_client(&config).await?;
+    let reference_client = service::build_reference_client(&config)?;
 
     let refresh_store = snapshots.clone();
     let refresh_config = config.clone();
     tokio::spawn(async move {
-        service::refresh_loop(refresh_store, client, refresh_config).await;
+        service::refresh_loop(refresh_store, client, reference_client, refresh_config).await;
     });
 
     let router = build_router(

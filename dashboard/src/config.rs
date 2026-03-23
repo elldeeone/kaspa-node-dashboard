@@ -9,6 +9,10 @@ pub struct Config {
     pub kaspad_wrpc_url: String,
     pub refresh_interval: Duration,
     pub request_timeout: Duration,
+    pub reference_tip_url: String,
+    pub reference_tip_source: String,
+    pub reference_poll_interval: Duration,
+    pub reference_daa_per_second: f64,
 }
 
 impl Config {
@@ -32,6 +36,12 @@ impl Config {
 
         let refresh_interval = parse_duration_ms("REFRESH_INTERVAL_MS", 3_000)?;
         let request_timeout = parse_duration_ms("REQUEST_TIMEOUT_MS", 5_000)?;
+        let reference_tip_url = env::var("REFERENCE_TIP_URL")
+            .unwrap_or_else(|_| "https://api.kaspa.org/info/blockdag".to_string());
+        let reference_tip_source =
+            env::var("REFERENCE_TIP_SOURCE").unwrap_or_else(|_| "api.kaspa.org".to_string());
+        let reference_poll_interval = parse_duration_ms("REFERENCE_POLL_INTERVAL_MS", 900_000)?;
+        let reference_daa_per_second = parse_f64("REFERENCE_DAA_PER_SECOND", 10.0)?;
 
         Ok(Self {
             bind_addr,
@@ -39,6 +49,10 @@ impl Config {
             kaspad_wrpc_url,
             refresh_interval,
             request_timeout,
+            reference_tip_url,
+            reference_tip_source,
+            reference_poll_interval,
+            reference_daa_per_second,
         })
     }
 }
@@ -52,4 +66,13 @@ fn parse_duration_ms(key: &str, default_ms: u64) -> Result<Duration> {
         .unwrap_or(default_ms);
 
     Ok(Duration::from_millis(value))
+}
+
+fn parse_f64(key: &str, default_value: f64) -> Result<f64> {
+    env::var(key)
+        .ok()
+        .map(|raw| raw.parse::<f64>())
+        .transpose()
+        .with_context(|| format!("failed to parse {key} as a floating-point number"))?
+        .map_or(Ok(default_value), Ok)
 }

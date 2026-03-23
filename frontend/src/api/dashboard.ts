@@ -40,6 +40,13 @@ export const dashboardSnapshotSchema = z.object({
     virtualDaaScore: z.coerce.number().catch(0),
     sink: z.string().catch(""),
   }),
+  syncEstimate: z.object({
+    estimatedDaaLag: z.coerce.number().nullable().catch(null),
+    estimatedTimeToSyncSeconds: z.coerce.number().nullable().catch(null),
+    referenceDaaScore: z.coerce.number().nullable().catch(null),
+    referenceFetchedAt: z.string().nullable().optional(),
+    referenceSource: z.string().nullable().optional(),
+  }),
   peers: z.object({
     total: z.coerce.number().catch(0),
     inbound: z.coerce.number().catch(0),

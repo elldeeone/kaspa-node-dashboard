@@ -8,6 +8,7 @@ pub struct DashboardSnapshot {
     pub kaspad: KaspadStatus,
     pub sync_status: SyncStatus,
     pub blockdag: BlockDagSummary,
+    pub sync_estimate: SyncEstimate,
     pub peers: PeerSummary,
     pub mempool: MempoolSummary,
     pub last_update: Option<DateTime<Utc>>,
@@ -16,6 +17,7 @@ pub struct DashboardSnapshot {
 impl Default for DashboardSnapshot {
     fn default() -> Self {
         let blockdag = BlockDagSummary::default();
+        let sync_estimate = SyncEstimate::default();
         let peers = PeerSummary::default();
         let kaspad = KaspadStatus::default();
         let connection = ConnectionStatus {
@@ -23,13 +25,15 @@ impl Default for DashboardSnapshot {
             state: "connecting".to_string(),
             message: Some("Waiting for kaspad connection".to_string()),
         };
-        let sync_status = SyncStatus::from_snapshot(&connection, &kaspad, &blockdag, &peers);
+        let sync_status =
+            SyncStatus::from_snapshot(&connection, &kaspad, &blockdag, &sync_estimate, &peers);
 
         Self {
             connection,
             kaspad,
             sync_status,
             blockdag,
+            sync_estimate,
             peers,
             mempool: MempoolSummary::default(),
             last_update: None,
@@ -64,11 +68,22 @@ pub struct SyncStatus {
     pub ibd_peer_address: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncEstimate {
+    pub estimated_daa_lag: Option<u64>,
+    pub estimated_time_to_sync_seconds: Option<u64>,
+    pub reference_daa_score: Option<u64>,
+    pub reference_fetched_at: Option<DateTime<Utc>>,
+    pub reference_source: Option<String>,
+}
+
 impl SyncStatus {
     pub fn from_snapshot(
         connection: &ConnectionStatus,
         kaspad: &KaspadStatus,
         blockdag: &BlockDagSummary,
+        sync_estimate: &SyncEstimate,
         peers: &PeerSummary,
     ) -> Self {
         if !connection.connected {
@@ -90,10 +105,7 @@ impl SyncStatus {
             return Self {
                 state: "synced".to_string(),
                 label: "Synced".to_string(),
-                detail: format!(
-                    "Node is fully synced with {} validated blocks",
-                    format_number(blockdag.block_count)
-                ),
+                detail: "Node is synced with the network tip.".to_string(),
                 ibd_peer_address: None,
             };
         }
@@ -114,15 +126,41 @@ impl SyncStatus {
             .iter()
             .find(|peer| peer.is_ibd_peer)
             .map(|peer| peer.address.clone());
-        let detail = if blockdag.headers_ahead > 0 {
-            format!(
-                "{} headers are ahead of fully processed blocks while the node catches up",
-                format_number(blockdag.headers_ahead)
-            )
-        } else if ibd_peer_address.is_some() {
-            "Node is downloading and validating block data from its current sync peer".to_string()
-        } else {
-            "Node is connected to peers and still catching up with the network".to_string()
+        let detail = match (
+            sync_estimate.estimated_daa_lag,
+            blockdag.headers_ahead,
+            sync_estimate.reference_source.as_deref(),
+            ibd_peer_address.as_ref(),
+        ) {
+            (Some(daa_lag), headers_ahead, _, _) if daa_lag > 0 && headers_ahead > 0 => format!(
+                "About {} DAA behind with {} headers left to process.",
+                format_number(daa_lag),
+                format_number(headers_ahead)
+            ),
+            (Some(daa_lag), _, _, _) if daa_lag > 0 => format!(
+                "About {} DAA behind the network tip.",
+                format_number(daa_lag)
+            ),
+            (_, headers_ahead, Some(_), Some(_)) if headers_ahead > 0 => format!(
+                "Estimating network lag with {} headers left to process.",
+                format_number(headers_ahead)
+            ),
+            (_, headers_ahead, _, Some(_)) if headers_ahead > 0 => format!(
+                "Processing {} remaining headers.",
+                format_number(headers_ahead)
+            ),
+            (_, _, _, Some(_)) => {
+                "Downloading and validating data from the current sync peer.".to_string()
+            }
+            (_, headers_ahead, Some(_), _) if headers_ahead > 0 => format!(
+                "Estimating network lag with {} headers left to process.",
+                format_number(headers_ahead)
+            ),
+            (_, headers_ahead, _, _) if headers_ahead > 0 => format!(
+                "Processing {} remaining headers.",
+                format_number(headers_ahead)
+            ),
+            _ => "Catching up with the network.".to_string(),
         };
 
         Self {

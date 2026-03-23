@@ -16,8 +16,8 @@ COPY dashboard/Cargo.toml dashboard/Cargo.lock ./
 RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 RUN cargo build --release --locked || true
 
-COPY dashboard/src ./src
-RUN cargo build --release --locked
+COPY dashboard/src/. ./src/
+RUN find ./src -type f -exec touch {} + && cargo build --release --locked
 
 FROM debian:bookworm-slim
 

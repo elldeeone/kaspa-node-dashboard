@@ -88,7 +88,7 @@ export default function App() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-            <SyncProgressCard blockdag={snapshot?.blockdag ?? null} syncStatus={snapshot?.syncStatus ?? null} />
+            <SyncProgressCard blockdag={snapshot?.blockdag ?? null} syncEstimate={snapshot?.syncEstimate ?? null} syncStatus={snapshot?.syncStatus ?? null} />
             <ConnectionsCard isUtxoIndexed={snapshot?.kaspad.isUtxoIndexed ?? false} peers={snapshot?.peers ?? null} />
           </div>
 

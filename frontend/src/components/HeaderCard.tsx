@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { DashboardSnapshot } from "../api/dashboard";
 import type { DashboardRequestState } from "../hooks/useDashboard";
 import { copyToClipboard, formatNodeVersion } from "../lib/formatters";
-import { InfoIcon } from "./icons";
+import { InfoTooltip } from "./InfoTooltip";
 
 type HeaderCardProps = {
   snapshot: DashboardSnapshot | null;
@@ -43,7 +43,6 @@ function getConnectionState(snapshot: DashboardSnapshot | null, requestState: Da
 
 export function HeaderCard({ snapshot, requestState }: HeaderCardProps) {
   const [copied, setCopied] = useState(false);
-  const [statusHelpVisible, setStatusHelpVisible] = useState(false);
   const connectionState = getConnectionState(snapshot, requestState);
   const p2pId = snapshot?.kaspad.p2pId || "Loading...";
   const status = !snapshot ? "Loading..." : snapshot.kaspad.isSynced ? "Running" : snapshot.syncStatus.label;
@@ -92,32 +91,11 @@ export function HeaderCard({ snapshot, requestState }: HeaderCardProps) {
         <div className="w-full flex-shrink-0 text-center sm:w-auto sm:text-right">
           <div className="mb-1 flex items-center justify-center gap-2 sm:justify-end">
             <p className="text-sm text-zinc-400">Status</p>
-            <div
-              className="relative"
-              onMouseEnter={() => setStatusHelpVisible(true)}
-              onMouseLeave={() => setStatusHelpVisible(false)}
-            >
-              <button
-                aria-describedby="status-help-tooltip"
-                aria-expanded={statusHelpVisible}
-                aria-label="Show status help"
-                className="rounded-full p-0.5 text-zinc-500 outline-none transition-colors hover:text-zinc-400 focus-visible:ring-2 focus-visible:ring-teal-400/70"
-                onBlur={() => setStatusHelpVisible(false)}
-                onClick={() => setStatusHelpVisible((visible) => !visible)}
-                onFocus={() => setStatusHelpVisible(true)}
-                type="button"
-              >
-                <InfoIcon aria-hidden="true" className="h-4 w-4 cursor-help" />
-              </button>
-              <div
-                className={`status-help-tooltip pointer-events-none absolute right-0 top-full z-10 mt-2 w-72 max-w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-left text-xs text-zinc-300 transition-opacity duration-200 ${
-                  statusHelpVisible ? "opacity-100" : "opacity-0"
-                }`}
-                id="status-help-tooltip"
-              >
-                Please note that your node needs to fully synchronise with the Kaspa network before it can be used. Initial synchronisation may take at least 1-2 hours depending on your hardware and network connection.
-              </div>
-            </div>
+            <InfoTooltip
+              buttonLabel="Show status help"
+              content="Please note that your node needs to fully synchronise with the Kaspa network before it can be used. Initial synchronisation may take at least 1-2 hours depending on your hardware and network connection."
+              tooltipId="status-help-tooltip"
+            />
           </div>
           <p className={`text-2xl font-bold ${statusClassName}`}>{status}</p>
           <p className="text-xs text-zinc-500">{network ? `Network: ${network}` : "Loading..."}</p>

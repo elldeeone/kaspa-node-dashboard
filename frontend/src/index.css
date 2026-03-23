@@ -94,7 +94,8 @@ th {
 }
 
 @media (max-width: 768px) {
-  .status-help-tooltip {
+  .status-help-tooltip,
+  .info-tooltip-panel {
     position: fixed !important;
     top: 1rem !important;
     right: 1rem !important;
@@ -112,13 +113,11 @@ th {
     padding-left: 0.5rem !important;
   }
 
-  table {
-    min-width: 650px;
-    font-size: 0.875rem;
-  }
-
   .peer-table {
+    min-width: 650px;
+    width: max(650px, 100%);
     table-layout: auto;
+    font-size: 0.875rem;
   }
 
   .peer-table td {

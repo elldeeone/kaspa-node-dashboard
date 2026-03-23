@@ -83,7 +83,7 @@ function createSyncedSnapshot(): DashboardSnapshot {
     syncStatus: {
       state: "synced",
       label: "Synced",
-      detail: "Node is fully synced with 29,842,511 validated blocks",
+      detail: "Node is synced with the network tip.",
       ibdPeerAddress: null,
     },
     blockdag: {
@@ -96,6 +96,13 @@ function createSyncedSnapshot(): DashboardSnapshot {
       pastMedianTime: 1719999999,
       virtualDaaScore: 29842620,
       sink: "000000000000000000000000000000000000000000000000000000000000cafe",
+    },
+    syncEstimate: {
+      estimatedDaaLag: null,
+      estimatedTimeToSyncSeconds: null,
+      referenceDaaScore: null,
+      referenceFetchedAt: null,
+      referenceSource: null,
     },
     peers,
     mempool: {
@@ -152,7 +159,7 @@ function createSyncingSnapshot(): DashboardSnapshot {
     syncStatus: {
       state: "syncing",
       label: "Syncing",
-      detail: "11,222,220 headers are ahead of fully processed blocks while the node catches up",
+      detail: "About 11,222,220 DAA behind with 11,222,220 headers left to process.",
       ibdPeerAddress: "45.79.113.10:16111",
     },
     blockdag: {
@@ -165,6 +172,13 @@ function createSyncingSnapshot(): DashboardSnapshot {
       pastMedianTime: 1719991123,
       virtualDaaScore: 18620312,
       sink: "0000000000000000000000000000000000000000000000000000000000003333",
+    },
+    syncEstimate: {
+      estimatedDaaLag: 11222220,
+      estimatedTimeToSyncSeconds: 21600,
+      referenceDaaScore: 29842532,
+      referenceFetchedAt: nowIso(),
+      referenceSource: "api.kaspa.org",
     },
     peers,
     mempool: {
@@ -205,6 +219,13 @@ function createReconnectingSnapshot(): DashboardSnapshot {
       virtualDaaScore: 0,
       sink: "",
     },
+    syncEstimate: {
+      estimatedDaaLag: 11222220,
+      estimatedTimeToSyncSeconds: 21600,
+      referenceDaaScore: 29842532,
+      referenceFetchedAt: nowIso(),
+      referenceSource: "api.kaspa.org",
+    },
     peers: buildPeers([]),
     mempool: {
       size: 0,
@@ -243,6 +264,13 @@ function createEmptySnapshot(): DashboardSnapshot {
       pastMedianTime: 0,
       virtualDaaScore: 0,
       sink: "",
+    },
+    syncEstimate: {
+      estimatedDaaLag: null,
+      estimatedTimeToSyncSeconds: null,
+      referenceDaaScore: null,
+      referenceFetchedAt: null,
+      referenceSource: "api.kaspa.org",
     },
     peers: buildPeers([]),
     mempool: {

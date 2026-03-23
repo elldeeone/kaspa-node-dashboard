@@ -31,6 +31,10 @@ services:
       PORT: 4321
       STATIC_DIR: /app/static
       KASPAD_WRPC_URL: ws://kaspad:17110
+      REFERENCE_TIP_URL: https://api.kaspa.org/info/blockdag
+      REFERENCE_TIP_SOURCE: api.kaspa.org
+      REFERENCE_POLL_INTERVAL_MS: 900000
+      REFERENCE_DAA_PER_SECOND: 10
     depends_on:
       - kaspad
     ports:
