@@ -1,87 +1,79 @@
 import type { DashboardSnapshot } from "../api/dashboard";
-import { formatSubPhase } from "../lib/formatters";
-import { SYNC_PHASES, formatProgressLabel, getSyncMessage, isSyncComplete, mapSyncPhase } from "../lib/sync";
+import { formatCompactNumber } from "../lib/formatters";
 
 type SyncProgressCardProps = {
-  syncProgress: DashboardSnapshot["syncProgress"] | null;
+  syncStatus: DashboardSnapshot["syncStatus"] | null;
+  blockdag: DashboardSnapshot["blockdag"] | null;
 };
 
-export function SyncProgressCard({ syncProgress }: SyncProgressCardProps) {
-  const currentPhase = mapSyncPhase(syncProgress);
-  const isComplete = isSyncComplete(syncProgress);
-  const currentPhaseIndex = SYNC_PHASES.indexOf(currentPhase);
-  const subPhase = syncProgress?.sub_phase ?? null;
-  const showSubPhase = Boolean(subPhase) && !isComplete;
+function getStatusClasses(state: string | undefined) {
+  switch (state) {
+    case "synced":
+      return {
+        chip: "border-teal-500/40 bg-teal-500/10 text-teal-300",
+        dot: "bg-teal-400",
+      };
+    case "syncing":
+      return {
+        chip: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+        dot: "bg-amber-400",
+      };
+    case "waiting-for-peers":
+      return {
+        chip: "border-orange-500/40 bg-orange-500/10 text-orange-200",
+        dot: "bg-orange-400",
+      };
+    default:
+      return {
+        chip: "border-zinc-700 bg-zinc-800/80 text-zinc-300",
+        dot: "bg-zinc-500",
+      };
+  }
+}
+
+function renderMetric(label: string, value: string) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+      <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-gray-50">{value}</p>
+    </div>
+  );
+}
+
+export function SyncProgressCard({ syncStatus, blockdag }: SyncProgressCardProps) {
+  const styles = getStatusClasses(syncStatus?.state);
+  const blockCount = blockdag ? formatCompactNumber(blockdag.blockCount) : "0";
+  const headerCount = blockdag ? formatCompactNumber(blockdag.headerCount) : "0";
+  const headersAhead = blockdag ? formatCompactNumber(blockdag.headersAhead) : "0";
 
   return (
     <div className="relative overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/70 lg:col-span-2">
       <div className="grid-background absolute inset-0" />
       <div className="relative p-4 sm:p-6">
-        <div className="mb-6 flex items-center gap-2">
-          <div className="relative flex h-3 w-3">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-teal-500" />
-          </div>
-          <h2 className="text-lg font-semibold text-gray-50">Sync Progress</h2>
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-gray-50">Sync Status</h2>
+          <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${styles.chip}`}>
+            <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
+            {syncStatus?.label ?? "Connecting"}
+          </span>
         </div>
-        <div className="flex flex-col items-center justify-center gap-6 pt-4">
-          <div className="flex w-full items-start justify-center px-2 sm:px-4 md:px-8" id="syncPhaseIndicator">
-            {SYNC_PHASES.map((phase, index) => {
-              const isCompleted = isComplete || index < currentPhaseIndex;
-              const isCurrent = !isComplete && index === currentPhaseIndex;
 
-              return (
-                <div className="flex w-full items-start" key={phase}>
-                  <div className="flex flex-1 flex-col items-center gap-2">
-                    <div
-                      className={`relative flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 ${
-                        isCompleted ? "border-teal-400 bg-teal-400" : "border-zinc-600"
-                      } ${isCurrent ? "border-teal-400" : ""}`}
-                    >
-                      {isCompleted ? (
-                        <svg className="h-5 w-5 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                        </svg>
-                      ) : null}
-                      {isCurrent ? (
-                        <>
-                          <span className="absolute h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
-                          <div className="h-3 w-3 rounded-full bg-teal-400" />
-                        </>
-                      ) : null}
-                    </div>
-                    <p className={`text-center text-xs font-medium transition-colors duration-300 ${isCompleted || isCurrent ? "text-gray-200" : "text-zinc-500"}`}>
-                      {phase}
-                    </p>
-                  </div>
-                  {index < SYNC_PHASES.length - 1 ? (
-                    <div className={`relative top-4 mx-2 h-0.5 flex-1 rounded-full transition-colors duration-300 ${isCompleted ? "bg-teal-400" : "bg-zinc-600"}`} />
-                  ) : null}
-                </div>
-              );
-            })}
+        <div className="space-y-6">
+          <div className="max-w-2xl">
+            <h3 className="text-4xl font-bold tracking-tight text-gray-50 sm:text-5xl">{syncStatus?.label ?? "Connecting"}</h3>
+            <p className="mt-3 text-sm leading-6 text-zinc-400">{syncStatus?.detail ?? "Waiting for kaspad connection"}</p>
           </div>
-          <div className="text-center">
-            <p className="mb-4 text-sm text-zinc-400">{getSyncMessage(syncProgress)}</p>
-            <h2 className="mt-1 text-6xl font-bold tracking-tighter text-gray-50">{formatProgressLabel(syncProgress)}</h2>
-            <p className="text-xs text-zinc-500">Overall Progress</p>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {renderMetric("Blocks", blockCount)}
+            {renderMetric("Headers", headerCount)}
+            {renderMetric("Header Gap", headersAhead)}
           </div>
-          {showSubPhase ? (
-            <div className="flex flex-wrap items-center justify-center gap-1 text-center">
-              <span className="text-sm text-zinc-400">Sub-Phase:</span>
-              <span className="text-sm text-gray-50">{formatSubPhase(subPhase)}</span>
-            </div>
-          ) : null}
-          {syncProgress?.peer_address ? (
-            <div className="flex flex-wrap items-center justify-center gap-1 text-center">
-              <span className="text-sm text-zinc-400">Sync Peer:</span>
-              <span className="text-sm text-gray-50">{syncProgress.peer_address}</span>
-            </div>
-          ) : null}
-          {syncProgress?.error ? (
-            <div className="flex flex-wrap items-center justify-center gap-1 text-center">
-              <span className="text-sm text-zinc-400">Error:</span>
-              <span className="text-sm text-red-400">{syncProgress.error}</span>
+
+          {syncStatus?.ibdPeerAddress ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-sm">
+              <span className="text-zinc-400">Current sync peer</span>
+              <span className="font-mono text-gray-50">{syncStatus.ibdPeerAddress}</span>
             </div>
           ) : null}
         </div>

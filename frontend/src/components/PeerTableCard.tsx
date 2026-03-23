@@ -85,7 +85,7 @@ export function PeerTableCard({ peers }: PeerTableCardProps) {
                   <td className={`px-2 py-3 text-right font-medium ${renderPingClass(peer.pingMs)}`}>
                     {peer.pingMs === null ? "N/A" : `${peer.pingMs}ms`}
                   </td>
-                  <td className="px-2 py-3 text-right text-sm text-zinc-400">{formatDuration(peer.connected_time)}</td>
+                  <td className="px-2 py-3 text-right text-sm text-zinc-400">{formatDuration(peer.connectedSeconds)}</td>
                 </tr>
               ))
             )}

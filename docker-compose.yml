@@ -6,59 +6,35 @@ services:
     stop_grace_period: 1m
     volumes:
       - ${APP_DATA_DIR:-./data}/data:/data
-      - ${APP_DATA_DIR:-./data}/logs:/logs
     ports:
       - 16110:16110  # GRPC
       - 16111:16111  # P2P
       - 17110:17110  # WRPC (Borsh)
       - 18110:18110  # WRPC (JSON)
     command: >
-      sh -c "kaspad
+      kaspad
       --rpclisten=0.0.0.0:16110
       --rpclisten-borsh=0.0.0.0:17110
       --rpclisten-json=0.0.0.0:18110
       --loglevel=info
-      2>&1 | (
-        BUFFER_FILE=/logs/kaspad_buffer.log
-        BUFFER_SIZE=10000
-        > \$$BUFFER_FILE
-        while IFS= read -r line; do
-          echo \"\$$line\" >> \$$BUFFER_FILE
-          LINE_COUNT=\$$(wc -l < \$$BUFFER_FILE)
-          if [ \$$LINE_COUNT -gt \$$BUFFER_SIZE ]; then
-            tail -n \$$BUFFER_SIZE \$$BUFFER_FILE > \$$BUFFER_FILE.tmp
-            mv \$$BUFFER_FILE.tmp \$$BUFFER_FILE
-          fi
-        done
-      )"
     networks:
       - kaspa-net
 
-  api:
-    build: ./api
-    container_name: kaspa-api
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    container_name: kaspa-dashboard
     restart: on-failure
     stop_grace_period: 1m
     environment:
-      KASPAD_HOST: kaspad
-      KASPAD_RPC_PORT: 18110
-    volumes:
-      - ${APP_DATA_DIR:-./data}/logs:/logs:ro
+      PORT: 4321
+      STATIC_DIR: /app/static
+      KASPAD_WRPC_URL: ws://kaspad:17110
     depends_on:
       - kaspad
-    networks:
-      - kaspa-net
-
-  # Frontend Dashboard - The web interface
-  frontend:
-    build: ./frontend
-    container_name: kaspa-frontend
-    restart: on-failure
-    stop_grace_period: 1m
     ports:
       - 4321:4321
-    depends_on:
-      - api
     networks:
       - kaspa-net
 

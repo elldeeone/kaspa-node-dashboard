@@ -27,7 +27,10 @@ function getAveragePingValue(snapshot: DashboardSnapshot | null) {
 }
 
 function getAveragePingDetail(snapshot: DashboardSnapshot | null) {
-  return snapshot ? `${snapshot.peers.ibdPeerCount} IBD peers` : "Loading...";
+  if (!snapshot) {
+    return "Loading...";
+  }
+  return snapshot.peers.ibdPeerCount === 1 ? "1 IBD peer" : `${snapshot.peers.ibdPeerCount} IBD peers`;
 }
 
 function getMempoolValue(snapshot: DashboardSnapshot | null) {
@@ -41,7 +44,7 @@ function getMempoolValue(snapshot: DashboardSnapshot | null) {
 }
 
 function getMempoolDetail(snapshot: DashboardSnapshot | null) {
-  return snapshot ? snapshot.kaspad.network : "Loading...";
+  return snapshot ? `Network: ${snapshot.kaspad.network}` : "Loading...";
 }
 
 export default function App() {
@@ -85,7 +88,7 @@ export default function App() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
-            <SyncProgressCard syncProgress={snapshot?.syncProgress ?? null} />
+            <SyncProgressCard blockdag={snapshot?.blockdag ?? null} syncStatus={snapshot?.syncStatus ?? null} />
             <ConnectionsCard isUtxoIndexed={snapshot?.kaspad.isUtxoIndexed ?? false} peers={snapshot?.peers ?? null} />
           </div>
 

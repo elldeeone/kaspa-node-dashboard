@@ -26,26 +26,18 @@ function getConnectionState(snapshot: DashboardSnapshot | null, requestState: Da
     };
   }
 
-  if (snapshot.connection.connected && snapshot.connection.ready) {
-    return {
-      label: snapshot.connection.subscribed ? "Connected (Live)" : "Connected",
-      indicatorClass: "bg-green-500",
-      title: snapshot.connection.subscribed ? "WebSocket connected and subscribed" : "WebSocket connected and ready",
-    };
-  }
-
   if (snapshot.connection.connected) {
     return {
-      label: "Initializing...",
-      indicatorClass: "bg-yellow-500 animate-pulse",
-      title: "WebSocket connected, initial state still loading",
+      label: "Connected",
+      indicatorClass: "bg-green-500",
+      title: snapshot.connection.message ?? "Connected to kaspad",
     };
   }
 
   return {
     label: "Disconnected",
     indicatorClass: "bg-red-500 animate-pulse",
-    title: "WebSocket disconnected, retrying",
+    title: "Dashboard is retrying its connection to kaspad",
   };
 }
 
@@ -53,9 +45,9 @@ export function HeaderCard({ snapshot, requestState }: HeaderCardProps) {
   const [copied, setCopied] = useState(false);
   const connectionState = getConnectionState(snapshot, requestState);
   const p2pId = snapshot?.kaspad.p2pId || "Loading...";
-  const status = !snapshot ? "Loading..." : snapshot.kaspad.isSynced ? "Running" : "Syncing";
+  const status = !snapshot ? "Loading..." : snapshot.kaspad.isSynced ? "Running" : snapshot.syncStatus.label;
   const statusClassName = !snapshot ? "text-zinc-300" : snapshot.kaspad.isSynced ? "text-teal-400" : "text-yellow-400";
-  const uptime = snapshot?.kaspad.uptime.uptime_formatted;
+  const network = snapshot?.kaspad.network;
 
   async function handleCopy() {
     if (!snapshot?.kaspad.p2pId) {
@@ -107,7 +99,7 @@ export function HeaderCard({ snapshot, requestState }: HeaderCardProps) {
             </div>
           </div>
           <p className={`text-2xl font-bold ${statusClassName}`}>{status}</p>
-          <p className="text-xs text-zinc-500">{uptime ? `for ${uptime}` : "Loading..."}</p>
+          <p className="text-xs text-zinc-500">{network ? `Network: ${network}` : "Loading..."}</p>
         </div>
       </div>
     </div>
