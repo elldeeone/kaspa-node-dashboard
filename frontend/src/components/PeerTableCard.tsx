@@ -37,13 +37,13 @@ function renderPingClass(pingMs: number | null) {
 
 export function PeerTableCard({ peers }: PeerTableCardProps) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 sm:p-6">
+    <div className="min-w-0 w-full max-w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 sm:p-6">
       <div className="mb-4 flex items-center gap-2">
         <WifiIcon className="h-5 w-5 text-zinc-400" />
         <h2 className="text-lg font-semibold text-gray-50">Connected Peers</h2>
       </div>
       <p className="mb-4 text-sm text-zinc-400">A list of peers currently connected to your node.</p>
-      <div className="custom-scrollbar overflow-x-auto">
+      <div className="custom-scrollbar min-w-0 w-full max-w-full overflow-x-auto">
         <table className="peer-table w-full">
           <thead>
             <tr className="border-b border-zinc-800">

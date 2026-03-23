@@ -43,6 +43,7 @@ function getConnectionState(snapshot: DashboardSnapshot | null, requestState: Da
 
 export function HeaderCard({ snapshot, requestState }: HeaderCardProps) {
   const [copied, setCopied] = useState(false);
+  const [statusHelpVisible, setStatusHelpVisible] = useState(false);
   const connectionState = getConnectionState(snapshot, requestState);
   const p2pId = snapshot?.kaspad.p2pId || "Loading...";
   const status = !snapshot ? "Loading..." : snapshot.kaspad.isSynced ? "Running" : snapshot.syncStatus.label;
@@ -66,14 +67,14 @@ export function HeaderCard({ snapshot, requestState }: HeaderCardProps) {
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 sm:p-6">
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-        <div className="flex min-w-0 flex-1 items-center gap-4">
+        <div className="flex min-w-0 w-full flex-col items-start gap-3 sm:w-auto sm:flex-1 sm:flex-row sm:items-center sm:gap-4">
           <img alt="Kaspa Logo" className="h-[60px] w-[60px] flex-shrink-0" height="60" src="/kaspa-glow.png" width="60" />
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold tracking-tight text-gray-50">Kaspa Node</h1>
             <p className="text-sm text-zinc-400">{snapshot ? formatNodeVersion(snapshot.kaspad.version) : "Loading..."}</p>
             <button
               aria-label="Copy P2P ID to clipboard"
-              className="truncate text-left font-mono text-xs text-zinc-500"
+              className="block w-full max-w-full truncate text-left font-mono text-xs text-zinc-500"
               onClick={handleCopy}
               title={snapshot?.kaspad.p2pId ? `Click to copy P2P ID: ${snapshot.kaspad.p2pId}` : "P2P ID unavailable"}
               type="button"
@@ -91,9 +92,29 @@ export function HeaderCard({ snapshot, requestState }: HeaderCardProps) {
         <div className="w-full flex-shrink-0 text-center sm:w-auto sm:text-right">
           <div className="mb-1 flex items-center justify-center gap-2 sm:justify-end">
             <p className="text-sm text-zinc-400">Status</p>
-            <div className="group relative">
-              <InfoIcon aria-hidden="true" className="h-4 w-4 cursor-help text-zinc-500 hover:text-zinc-400" />
-              <div className="status-help-tooltip pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-64 -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-center text-xs text-zinc-300 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <div
+              className="relative"
+              onMouseEnter={() => setStatusHelpVisible(true)}
+              onMouseLeave={() => setStatusHelpVisible(false)}
+            >
+              <button
+                aria-describedby="status-help-tooltip"
+                aria-expanded={statusHelpVisible}
+                aria-label="Show status help"
+                className="rounded-full p-0.5 text-zinc-500 outline-none transition-colors hover:text-zinc-400 focus-visible:ring-2 focus-visible:ring-teal-400/70"
+                onBlur={() => setStatusHelpVisible(false)}
+                onClick={() => setStatusHelpVisible((visible) => !visible)}
+                onFocus={() => setStatusHelpVisible(true)}
+                type="button"
+              >
+                <InfoIcon aria-hidden="true" className="h-4 w-4 cursor-help" />
+              </button>
+              <div
+                className={`status-help-tooltip pointer-events-none absolute right-0 top-full z-10 mt-2 w-72 max-w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-left text-xs text-zinc-300 transition-opacity duration-200 ${
+                  statusHelpVisible ? "opacity-100" : "opacity-0"
+                }`}
+                id="status-help-tooltip"
+              >
                 Please note that your node needs to fully synchronise with the Kaspa network before it can be used. Initial synchronisation may take at least 1-2 hours depending on your hardware and network connection.
               </div>
             </div>

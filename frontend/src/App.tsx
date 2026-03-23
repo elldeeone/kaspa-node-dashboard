@@ -55,7 +55,7 @@ export default function App() {
   return (
     <div className="flex min-h-screen w-full flex-col bg-black text-gray-200">
       <main className="flex-1 px-2 pb-8 pt-2 sm:px-4 sm:pb-10 sm:pt-4 md:px-8 md:pb-12 md:pt-8">
-        <div className="mx-auto grid max-w-7xl gap-4 px-2 sm:gap-6 sm:px-4">
+        <div className="mx-auto grid w-full min-w-0 max-w-7xl grid-cols-1 gap-4 px-2 sm:gap-6 sm:px-4">
           {mockScenario ? (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
               <p>

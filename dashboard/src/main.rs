@@ -5,7 +5,12 @@ mod service;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use axum::{Json, Router, extract::State, response::IntoResponse, routing::{get, get_service}};
+use axum::{
+    Json, Router,
+    extract::State,
+    response::IntoResponse,
+    routing::{get, get_service},
+};
 use tokio::net::TcpListener;
 use tower_http::{
     services::{ServeDir, ServeFile},
