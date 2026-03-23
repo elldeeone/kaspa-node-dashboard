@@ -67,7 +67,7 @@ fn build_router(state: AppState, static_dir: PathBuf) -> Router {
     Router::new()
         .route("/api/dashboard", get(get_dashboard))
         .route("/health", get(health))
-        .nest_service("/", static_files)
+        .fallback_service(static_files)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

@@ -10,14 +10,14 @@ RUN npm run build
 
 FROM rust:1.88-slim AS rust-build
 
-WORKDIR /build
+WORKDIR /build/dashboard
 
-COPY dashboard/Cargo.toml dashboard/Cargo.toml
-RUN mkdir -p dashboard/src && echo "fn main() {}" > dashboard/src/main.rs
-RUN cargo build --manifest-path dashboard/Cargo.toml --release || true
+COPY dashboard/Cargo.toml dashboard/Cargo.lock ./
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release --locked || true
 
-COPY dashboard dashboard
-RUN cargo build --manifest-path dashboard/Cargo.toml --release
+COPY dashboard/src ./src
+RUN cargo build --release --locked
 
 FROM debian:bookworm-slim
 
@@ -25,7 +25,7 @@ WORKDIR /app
 
 RUN useradd --system --create-home --shell /usr/sbin/nologin dashboard
 
-COPY --from=rust-build /build/target/release/kaspa-dashboard /usr/local/bin/kaspa-dashboard
+COPY --from=rust-build /build/dashboard/target/release/kaspa-dashboard /usr/local/bin/kaspa-dashboard
 COPY --from=frontend-build /build/frontend/dist /app/static
 
 ENV PORT=4321

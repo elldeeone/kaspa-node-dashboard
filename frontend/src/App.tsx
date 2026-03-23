@@ -101,11 +101,7 @@ export default function App() {
           {requestError ? <div className="text-center text-xs text-yellow-400">{requestError}</div> : null}
           <div className="mt-2 space-y-1 text-center text-xs text-zinc-500">
             <div>
-              Container maintained by{" "}
-              <a className="text-teal-400 transition-colors duration-200 hover:text-teal-300" href="https://hub.docker.com/u/supertypo" target="_blank" rel="noreferrer">
-                Supertypo
-              </a>{" "}
-              at{" "}
+              Node image:{" "}
               <a className="text-teal-400 transition-colors duration-200 hover:text-teal-300" href="https://hub.docker.com/r/kaspanet/rusty-kaspad" target="_blank" rel="noreferrer">
                 kaspanet/rusty-kaspad
               </a>

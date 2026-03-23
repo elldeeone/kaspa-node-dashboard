@@ -1,6 +1,6 @@
 services:
   kaspad:
-    image: supertypo/rusty-kaspad:latest
+    image: kaspanet/rusty-kaspad:latest
     container_name: kaspad
     restart: on-failure
     stop_grace_period: 1m
