@@ -486,6 +486,7 @@ fn map_peers(source: &[RpcPeerInfo]) -> PeerSummary {
         inbound,
         outbound,
         average_ping,
+        ping_sample_count: ping_count,
         ibd_peer_count,
         details,
     }

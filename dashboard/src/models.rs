@@ -193,6 +193,7 @@ pub struct PeerSummary {
     pub inbound: usize,
     pub outbound: usize,
     pub average_ping: Option<f64>,
+    pub ping_sample_count: usize,
     pub ibd_peer_count: usize,
     pub details: Vec<PeerView>,
 }

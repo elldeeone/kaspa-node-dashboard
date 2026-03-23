@@ -94,18 +94,6 @@ th {
 }
 
 @media (max-width: 768px) {
-  .status-help-tooltip,
-  .info-tooltip-panel {
-    position: fixed !important;
-    top: 1rem !important;
-    right: 1rem !important;
-    left: 1rem !important;
-    box-sizing: border-box !important;
-    width: calc(100vw - 2rem) !important;
-    max-width: calc(100vw - 2rem) !important;
-    transform: none !important;
-  }
-
   .max-w-7xl {
     max-width: 100% !important;
     margin: 0 !important;

@@ -22,6 +22,7 @@ function buildPeers(peers: PeerSeed[]) {
     inbound,
     outbound,
     averagePing,
+    pingSampleCount: pingValues.length,
     ibdPeerCount,
     details: peers,
   };

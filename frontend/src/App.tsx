@@ -3,6 +3,7 @@ import { type DashboardSnapshot } from "./api/dashboard";
 import { MOCK_SCENARIOS } from "./api/mockDashboard";
 import { ConnectionsCard } from "./components/ConnectionsCard";
 import { HeaderCard } from "./components/HeaderCard";
+import { InfoTooltip } from "./components/InfoTooltip";
 import { PeerTableCard } from "./components/PeerTableCard";
 import { StatCard } from "./components/StatCard";
 import { SupportCard } from "./components/SupportCard";
@@ -30,7 +31,12 @@ function getAveragePingDetail(snapshot: DashboardSnapshot | null) {
   if (!snapshot) {
     return "Loading...";
   }
-  return snapshot.peers.ibdPeerCount === 1 ? "1 IBD peer" : `${snapshot.peers.ibdPeerCount} IBD peers`;
+  if (snapshot.peers.pingSampleCount === 0) {
+    return "No ping samples yet";
+  }
+  return snapshot.peers.pingSampleCount === 1
+    ? "Across 1 sampled peer"
+    : `Across ${snapshot.peers.pingSampleCount} sampled peers`;
 }
 
 function getMempoolValue(snapshot: DashboardSnapshot | null) {
@@ -44,7 +50,10 @@ function getMempoolValue(snapshot: DashboardSnapshot | null) {
 }
 
 function getMempoolDetail(snapshot: DashboardSnapshot | null) {
-  return snapshot ? `Network: ${snapshot.kaspad.network}` : "Loading...";
+  if (!snapshot) {
+    return "Loading...";
+  }
+  return snapshot.kaspad.isSynced ? "Local transaction pool" : "Usually empty while syncing";
 }
 
 export default function App() {
@@ -82,9 +91,27 @@ export default function App() {
           <HeaderCard requestState={requestState} snapshot={snapshot} />
 
           <div className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <StatCard detail={getConnectionsDetail(snapshot)} icon={<UsersIcon />} title="Connections" value={getConnectionsValue(snapshot)} />
-            <StatCard detail={getAveragePingDetail(snapshot)} icon={<BoltIcon />} title="Average Ping" value={getAveragePingValue(snapshot)} />
-            <StatCard detail={getMempoolDetail(snapshot)} icon={<ChartIcon />} title="Mempool" value={getMempoolValue(snapshot)} />
+            <StatCard
+              detail={getConnectionsDetail(snapshot)}
+              helpText="Total active peer sessions. Outbound connections were initiated by your node, while inbound connections were initiated by remote peers."
+              icon={<UsersIcon />}
+              title="Connections"
+              value={getConnectionsValue(snapshot)}
+            />
+            <StatCard
+              detail={getAveragePingDetail(snapshot)}
+              helpText="Average of the most recent successful ping to connected peers, measured in milliseconds."
+              icon={<BoltIcon />}
+              title="Average Ping"
+              value={getAveragePingValue(snapshot)}
+            />
+            <StatCard
+              detail={getMempoolDetail(snapshot)}
+              helpText="Transactions currently waiting in your local node mempool. While the node is still syncing, this will often stay at zero."
+              icon={<ChartIcon />}
+              title="Mempool"
+              value={getMempoolValue(snapshot)}
+            />
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
@@ -96,7 +123,16 @@ export default function App() {
           <PeerTableCard peers={deferredPeers} />
 
           <div className="text-center text-sm text-zinc-400">
-            Last updated: <span>{formatLastUpdated(footerTimestamp)}</span>
+            <span className="inline-flex items-center justify-center gap-2">
+              <span>Last updated:</span>
+              <InfoTooltip
+                buttonClassName="rounded-full p-0.5 text-zinc-600 outline-none transition-colors hover:text-zinc-400 focus-visible:ring-2 focus-visible:ring-teal-400/70"
+                buttonLabel="Show last updated help"
+                content="Time of the most recent successful dashboard snapshot from the backend, shown in your browser's local timezone."
+                tooltipId="last-updated-tooltip"
+              />
+              <span>{formatLastUpdated(footerTimestamp)}</span>
+            </span>
           </div>
           {requestError ? <div className="text-center text-xs text-yellow-400">{requestError}</div> : null}
           <div className="mt-2 space-y-1 text-center text-xs text-zinc-500">
@@ -108,7 +144,7 @@ export default function App() {
             </div>
             <div>
               Packaged with <span aria-hidden="true">&#10084;</span> by{" "}
-              <a className="text-teal-400 transition-colors duration-200 hover:text-teal-300" href="https://luke.dunshea.au/" target="_blank" rel="noreferrer">
+              <a className="text-teal-400 transition-colors duration-200 hover:text-teal-300" href="https://dunshea.au/" target="_blank" rel="noreferrer">
                 Luke Dunshea
               </a>
             </div>

@@ -52,6 +52,7 @@ export const dashboardSnapshotSchema = z.object({
     inbound: z.coerce.number().catch(0),
     outbound: z.coerce.number().catch(0),
     averagePing: z.coerce.number().nullable().catch(null),
+    pingSampleCount: z.coerce.number().catch(0),
     ibdPeerCount: z.coerce.number().catch(0),
     details: z.array(peerSchema).catch([]),
   }),
